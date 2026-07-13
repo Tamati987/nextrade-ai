@@ -1,0 +1,821 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NexTrade AI — Powered by Claude</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap');
+:root{
+  --bg-0:#080C12;--bg-1:#0D1420;--bg-2:#121B2E;--bg-3:#1A2540;
+  --border:#1E2F4A;--border-hi:#2A4070;
+  --accent:#00D4FF;--accent-dim:rgba(0,212,255,.1);
+  --green:#00E676;--green-dim:rgba(0,230,118,.1);
+  --red:#FF3D57;--red-dim:rgba(255,61,87,.1);
+  --amber:#FFB300;--amber-dim:rgba(255,179,0,.1);
+  --purple:#A78BFA;--purple-dim:rgba(167,139,250,.1);
+  --gold:#FFD700;--gold-dim:rgba(255,215,0,.1);--gold-glow:rgba(255,215,0,.22);
+  --ai:#C084FC;--ai-dim:rgba(192,132,252,.1);--ai-glow:rgba(192,132,252,.22);
+  --t0:#E8F0FF;--t1:#8FA8CC;--t2:#4A6080;
+  --mono:'JetBrains Mono',monospace;--sans:'Inter',sans-serif;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg-0);color:var(--t0);font-family:var(--sans);height:100vh;overflow:hidden;display:flex;flex-direction:column}
+
+/* ── NAV ── */
+.topnav{height:52px;background:var(--bg-1);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 14px;gap:10px;flex-shrink:0;z-index:10}
+.logo{display:flex;align-items:center;gap:7px;font-size:14px;font-weight:700}
+.logo-icon{width:26px;height:26px;background:linear-gradient(135deg,var(--accent),var(--purple));border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:13px}
+.logo span{color:var(--ai)}
+.nav-tabs{display:flex;gap:2px;margin-left:6px}
+.ntab{padding:5px 11px;border-radius:6px;font-size:11px;font-weight:500;color:var(--t2);cursor:pointer;border:1px solid transparent;transition:all .15s}
+.ntab:hover{color:var(--t1);background:var(--bg-2)}
+.ntab.active{color:var(--accent);background:var(--accent-dim);border-color:rgba(0,212,255,.2)}
+.spacer{flex:1}
+.ticker{display:flex;gap:10px;font-family:var(--mono);font-size:10px}
+.ti{display:flex;align-items:center;gap:4px}
+.ti-sym{color:var(--t1);font-weight:600}
+.ti-p{color:var(--t0)}
+.ti-c.up{color:var(--green)}.ti-c.dn{color:var(--red)}
+.ai-badge{display:flex;align-items:center;gap:5px;padding:4px 9px;border-radius:6px;background:var(--ai-dim);border:1px solid var(--ai-glow);font-size:10px;font-weight:600;color:var(--ai)}
+.gold-badge{display:flex;align-items:center;gap:5px;padding:4px 9px;border-radius:6px;background:var(--gold-dim);border:1px solid var(--gold-glow);font-size:10px;font-weight:600;color:var(--gold)}
+.pulsedot{width:6px;height:6px;border-radius:50%;animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+/* ── SHELL ── */
+.shell{flex:1;display:flex;overflow:hidden}
+.sidebar{width:195px;min-width:195px;background:var(--bg-1);border-right:1px solid var(--border);display:flex;flex-direction:column;padding:8px;gap:1px;overflow-y:auto}
+.s-label{font-size:9px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--t2);padding:8px 8px 4px}
+.s-item{display:flex;align-items:center;gap:8px;padding:7px 9px;border-radius:7px;cursor:pointer;font-size:11px;font-weight:500;color:var(--t1);border:1px solid transparent;transition:all .15s}
+.s-item:hover{background:var(--bg-2);color:var(--t0)}
+.s-item.active{background:var(--accent-dim);color:var(--accent);border-color:rgba(0,212,255,.15)}
+.s-item .ic{font-size:12px;width:15px;text-align:center}
+.s-badge{margin-left:auto;font-size:9px;font-weight:700;padding:1px 5px;border-radius:8px}
+.s-badge.g{background:var(--green);color:#000}.s-badge.a{background:var(--amber);color:#000}
+
+.main{flex:1;display:flex;overflow:hidden}
+.content{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:12px}
+.content::-webkit-scrollbar{width:3px}
+.content::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+
+/* ── AI PANEL ── */
+.ai-panel{width:330px;min-width:330px;background:var(--bg-1);border-left:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden}
+.ai-ph{padding:12px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:7px;flex-shrink:0}
+.ai-ph-title{font-size:12px;font-weight:700}
+.ai-ph-sub{font-size:9px;color:var(--t2);margin-top:1px}
+.ai-model-tag{margin-left:auto;font-size:9px;font-weight:700;color:var(--ai);background:var(--ai-dim);border:1px solid var(--ai-glow);padding:3px 7px;border-radius:4px}
+
+.quick-actions{padding:8px 10px;border-bottom:1px solid var(--border);display:flex;flex-wrap:wrap;gap:4px;flex-shrink:0}
+.qa-btn{padding:3px 9px;border-radius:12px;font-size:9px;font-weight:600;cursor:pointer;border:1px solid var(--border);background:var(--bg-2);color:var(--t1);transition:all .15s;font-family:var(--sans)}
+.qa-btn:hover{border-color:var(--ai);color:var(--ai);background:var(--ai-dim)}
+
+.chat-messages{flex:1;overflow-y:auto;padding:10px;display:flex;flex-direction:column;gap:9px}
+.chat-messages::-webkit-scrollbar{width:3px}
+.chat-messages::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+
+.msg{display:flex;gap:7px;animation:fadeUp .2s ease}
+@keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+.msg-av{width:24px;height:24px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;margin-top:2px}
+.msg-av.ai{background:var(--ai-dim);border:1px solid var(--ai-glow)}
+.msg-av.user{background:var(--accent-dim);border:1px solid rgba(0,212,255,.2)}
+.msg-sender{font-size:9px;font-weight:700;margin-bottom:3px}
+.msg-sender.ai{color:var(--ai)}.msg-sender.user{color:var(--accent)}
+.msg-bubble{font-size:11px;line-height:1.6;color:var(--t1)}
+.msg-bubble strong{color:var(--t0)}
+
+.typing-dot{width:5px;height:5px;border-radius:50%;background:var(--ai);display:inline-block;margin:0 1px;animation:typing .7s ease-in-out infinite}
+.typing-dot:nth-child(2){animation-delay:.12s}.typing-dot:nth-child(3){animation-delay:.24s}
+@keyframes typing{0%,60%,100%{transform:translateY(0);opacity:.4}30%{transform:translateY(-3px);opacity:1}}
+
+.chat-input-area{padding:10px;border-top:1px solid var(--border);display:flex;gap:7px;flex-shrink:0}
+.chat-input{flex:1;background:var(--bg-2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:11px;color:var(--t0);font-family:var(--sans);outline:none;resize:none;line-height:1.4;max-height:70px;transition:border-color .15s}
+.chat-input:focus{border-color:var(--ai)}
+.chat-input::placeholder{color:var(--t2)}
+.send-btn{width:32px;height:32px;border-radius:7px;background:linear-gradient(135deg,var(--ai),var(--purple));border:none;color:#fff;cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:opacity .15s;align-self:flex-end}
+.send-btn:hover{opacity:.85}
+.send-btn:disabled{opacity:.4;cursor:not-allowed}
+
+/* ── CARDS ── */
+.card{background:var(--bg-1);border:1px solid var(--border);border-radius:11px;overflow:hidden}
+.card-header{padding:11px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:7px}
+.card-title{font-size:12px;font-weight:600}
+.card-sub{font-size:9px;color:var(--t2);margin-top:1px}
+.ch-actions{margin-left:auto;display:flex;gap:5px}
+.card-body{padding:13px}
+
+/* ── STATS ── */
+.stat-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:9px}
+.stat-card{background:var(--bg-1);border:1px solid var(--border);border-radius:10px;padding:12px;position:relative;overflow:hidden}
+.stat-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px}
+.stat-card.c-blue::before{background:linear-gradient(90deg,var(--accent),transparent)}
+.stat-card.c-green::before{background:linear-gradient(90deg,var(--green),transparent)}
+.stat-card.c-red::before{background:linear-gradient(90deg,var(--red),transparent)}
+.stat-card.c-purple::before{background:linear-gradient(90deg,var(--purple),transparent)}
+.stat-card.c-gold::before{background:linear-gradient(90deg,var(--gold),transparent)}
+.stat-card.c-ai::before{background:linear-gradient(90deg,var(--ai),transparent)}
+.s-lbl{font-size:9px;color:var(--t2);font-weight:500;margin-bottom:5px}
+.s-val{font-size:18px;font-weight:700;font-family:var(--mono)}
+.s-chg{font-size:9px;font-weight:600;margin-top:3px}
+.s-chg.up{color:var(--green)}.s-chg.dn{color:var(--red)}
+.s-ico{position:absolute;top:10px;right:10px;font-size:16px;opacity:.15}
+
+/* ── ANALYSIS CARD ── */
+.analysis-card{background:linear-gradient(135deg,rgba(192,132,252,.06),rgba(0,212,255,.03));border:1px solid var(--ai-glow);border-radius:10px;padding:13px}
+.analysis-header{display:flex;align-items:center;gap:7px;margin-bottom:9px}
+.analysis-title{font-size:11px;font-weight:700;color:var(--ai)}
+.analysis-body{font-size:11px;line-height:1.65;color:var(--t1)}
+.analysis-body strong{color:var(--t0)}
+.analysis-scores{display:flex;gap:7px;margin-top:10px;flex-wrap:wrap}
+.ascore{background:var(--bg-2);border:1px solid var(--border);border-radius:7px;padding:6px 9px;text-align:center;flex:1;min-width:55px}
+.ascore-val{font-size:14px;font-weight:700;font-family:var(--mono)}
+.ascore-lbl{font-size:8px;color:var(--t2);margin-top:1px}
+
+/* ── GOLD CARD ── */
+.gold-card{background:linear-gradient(135deg,rgba(255,215,0,.07),rgba(255,179,0,.03));border:1px solid var(--gold-glow);border-radius:10px;padding:13px}
+.gold-header{display:flex;align-items:center;gap:7px;margin-bottom:8px}
+.gold-title{font-size:11px;font-weight:700;color:var(--gold)}
+.gold-body{font-size:11px;line-height:1.65;color:var(--t1)}
+.gold-body strong{color:var(--t0)}
+
+/* ── BOT ROWS ── */
+.tbl-head{display:grid;grid-template-columns:30px 1fr 95px 80px 80px 75px 115px;gap:8px;padding:6px 12px;font-size:8px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--t2);border-bottom:1px solid var(--border)}
+.bot-row{background:var(--bg-2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;display:grid;grid-template-columns:30px 1fr 95px 80px 80px 75px 115px;align-items:center;gap:8px;transition:border-color .15s;cursor:pointer}
+.bot-row:hover{border-color:var(--border-hi)}
+.bot-row.selected{border-color:var(--ai);background:rgba(192,132,252,.04)}
+.bot-row.gold-bot{border-color:rgba(255,215,0,.2)}
+.bot-row.gold-bot:hover{border-color:var(--gold-glow)}
+.b-av{width:28px;height:28px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:13px}
+.b-name{font-size:11px;font-weight:600;color:var(--t0)}
+.b-desc{font-size:9px;color:var(--t2);margin-top:1px}
+.b-cl{font-size:8px;color:var(--t2);margin-bottom:1px}
+.b-cv{font-size:10px;font-family:var(--mono);color:var(--t0)}
+.pnl{font-family:var(--mono);font-size:11px;font-weight:600}
+.pnl.up{color:var(--green)}.pnl.dn{color:var(--red)}
+
+.tag{display:inline-flex;align-items:center;padding:2px 6px;border-radius:3px;font-size:8px;font-weight:700;letter-spacing:.3px}
+.tag-crypto{background:var(--accent-dim);color:var(--accent);border:1px solid rgba(0,212,255,.2)}
+.tag-forex{background:var(--amber-dim);color:var(--amber);border:1px solid rgba(255,179,0,.2)}
+.tag-cfd{background:var(--gold-dim);color:var(--gold);border:1px solid rgba(255,215,0,.25)}
+.tag-run{background:var(--green-dim);color:var(--green);border:1px solid rgba(0,230,118,.2)}
+.tag-pause{background:var(--bg-3);color:var(--t2);border:1px solid var(--border)}
+.tag-test{background:var(--amber-dim);color:var(--amber);border:1px solid rgba(255,179,0,.2)}
+
+.toggle{width:32px;height:17px;border-radius:9px;position:relative;cursor:pointer;border:none;outline:none}
+.toggle.on{background:var(--green)}.toggle.off{background:var(--bg-3);border:1px solid var(--border)}
+.toggle::after{content:'';position:absolute;width:11px;height:11px;border-radius:50%;background:#fff;top:3px;transition:left .2s}
+.toggle.on::after{left:18px}.toggle.off::after{left:3px}
+.row-actions{display:flex;gap:4px;align-items:center}
+.ico-btn{width:24px;height:24px;border-radius:5px;border:1px solid var(--border);background:var(--bg-3);color:var(--t1);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:10px;transition:all .15s}
+.ico-btn:hover{border-color:var(--accent);color:var(--accent)}
+.ico-btn.ai-b:hover{border-color:var(--ai);color:var(--ai)}
+.ico-btn.gold-b:hover{border-color:var(--gold);color:var(--gold)}
+
+/* ── LOG ── */
+.log-item{display:flex;align-items:flex-start;gap:9px;padding:8px 0;border-bottom:1px solid var(--border);font-size:10px}
+.log-item:last-child{border-bottom:none}
+.log-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;margin-top:3px}
+.log-dot.buy{background:var(--green)}.log-dot.sell{background:var(--red)}
+.log-dot.info{background:var(--accent)}.log-dot.warn{background:var(--amber)}
+.log-dot.ai{background:var(--ai)}.log-dot.gold{background:var(--gold)}
+.log-text{flex:1;color:var(--t1);line-height:1.4}
+.log-text strong{color:var(--t0)}
+.log-time{font-family:var(--mono);font-size:9px;color:var(--t2);flex-shrink:0;margin-top:2px}
+
+/* ── BTN ── */
+.btn{padding:6px 12px;border-radius:6px;font-size:10px;font-weight:600;cursor:pointer;border:none;font-family:var(--sans);transition:all .15s}
+.btn-primary{background:linear-gradient(135deg,var(--accent),#0080FF);color:#000}
+.btn-primary:hover{opacity:.9}
+.btn-ai{background:linear-gradient(135deg,var(--ai),var(--purple));color:#000}
+.btn-ai:hover{opacity:.9}
+.btn-gold{background:linear-gradient(135deg,var(--gold),#FFA000);color:#000}
+.btn-gold:hover{opacity:.9}
+.btn-ghost{background:var(--bg-2);border:1px solid var(--border);color:var(--t1)}
+.btn-ghost:hover{border-color:var(--border-hi);color:var(--t0)}
+
+/* ── MODAL ── */
+.modal-overlay{position:fixed;inset:0;background:rgba(8,12,18,.9);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;z-index:100;opacity:0;pointer-events:none;transition:opacity .2s}
+.modal-overlay.open{opacity:1;pointer-events:all}
+.modal{background:var(--bg-1);border:1px solid var(--border-hi);border-radius:13px;width:450px;max-height:80vh;overflow-y:auto;transform:translateY(18px);transition:transform .2s}
+.modal-overlay.open .modal{transform:translateY(0)}
+.modal-header{padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}
+.modal-title{font-size:13px;font-weight:700}
+.modal-close{margin-left:auto;width:24px;height:24px;border-radius:5px;border:1px solid var(--border);background:var(--bg-2);color:var(--t1);cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center}
+.modal-close:hover{color:var(--t0)}
+.modal-body{padding:16px;display:flex;flex-direction:column;gap:12px}
+.modal-footer{padding:12px 16px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.form-group{display:flex;flex-direction:column;gap:4px}
+.form-label{font-size:9px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.4px}
+.form-input,.form-select{background:var(--bg-2);border:1px solid var(--border);border-radius:6px;padding:7px 10px;font-size:11px;color:var(--t0);font-family:var(--sans);outline:none;transition:border-color .15s;width:100%}
+.form-input:focus,.form-select:focus{border-color:var(--accent)}
+option{background:var(--bg-2)}
+.sp{padding:4px 9px;border-radius:12px;font-size:9px;font-weight:600;cursor:pointer;border:1px solid var(--border);background:var(--bg-2);color:var(--t1);transition:all .15s}
+.sp.sel{background:var(--accent-dim);border-color:var(--accent);color:var(--accent)}
+input[type=range]{-webkit-appearance:none;width:100%;height:3px;background:var(--bg-3);border-radius:2px;outline:none;cursor:pointer}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;border-radius:50%;background:var(--accent);cursor:pointer}
+.api-box{background:var(--bg-2);border:1px solid var(--border);border-radius:8px;padding:11px;display:flex;flex-direction:column;gap:9px}
+
+/* ── TOAST ── */
+.toast{position:fixed;bottom:14px;right:14px;background:var(--bg-2);border:1px solid var(--ai-glow);border-radius:8px;padding:9px 13px;font-size:11px;color:var(--t0);display:flex;align-items:center;gap:7px;z-index:200;transform:translateY(50px);opacity:0;transition:all .25s}
+.toast.show{transform:translateY(0);opacity:1}
+
+.two-col{display:grid;grid-template-columns:2fr 1fr;gap:12px}
+canvas{display:block}
+
+/* ── DEPLOY CARD ── */
+.deploy-step{background:var(--bg-2);border:1px solid var(--border);border-radius:9px;padding:12px;display:flex;align-items:flex-start;gap:12px;margin-bottom:8px}
+.deploy-num{width:28px;height:28px;border-radius:50%;background:var(--accent-dim);border:1px solid rgba(0,212,255,.3);color:var(--accent);font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.deploy-content{flex:1}
+.deploy-title{font-size:12px;font-weight:600;color:var(--t0);margin-bottom:4px}
+.deploy-desc{font-size:10px;color:var(--t1);line-height:1.6}
+.code-block{background:var(--bg-0);border:1px solid var(--border);border-radius:6px;padding:9px 12px;font-family:var(--mono);font-size:10px;color:var(--accent);margin-top:7px;line-height:1.8;position:relative;overflow-x:auto}
+.copy-btn{position:absolute;top:6px;right:6px;padding:2px 7px;border-radius:4px;font-size:9px;font-weight:600;cursor:pointer;border:1px solid var(--border);background:var(--bg-2);color:var(--t2);font-family:var(--sans);transition:all .15s}
+.copy-btn:hover{color:var(--accent);border-color:var(--accent)}
+
+@media(max-width:1100px){.ai-panel{width:280px;min-width:280px}}
+@media(max-width:900px){.ai-panel{display:none}}
+</style>
+</head>
+<body>
+
+<!-- TOP NAV -->
+<div class="topnav">
+  <div class="logo"><div class="logo-icon">⚡</div>Nex<span>Trade</span> AI</div>
+  <div class="nav-tabs">
+    <div class="ntab active" onclick="goTab('dashboard',this)">Dashboard</div>
+    <div class="ntab" onclick="goTab('bots',this)">Mes Bots</div>
+    <div class="ntab" onclick="goTab('gold',this)">🥇 XAU/USD</div>
+    <div class="ntab" onclick="goTab('activity',this)">Activité</div>
+    <div class="ntab" onclick="window.open('/paper-trading.html','_blank')" style="color:var(--green)">📈 Paper Trading</div>
+    <div class="ntab" onclick="goTab('deploy',this)">🚀 Déploiement</div>
+  </div>
+  <div class="spacer"></div>
+  <div class="ticker">
+    <div class="ti"><span class="ti-sym">BTC</span><span class="ti-p" id="p-btc">67 420</span><span class="ti-c up" id="c-btc">+2.4%</span></div>
+    <div class="ti"><span class="ti-sym">ETH</span><span class="ti-p" id="p-eth">3 521</span><span class="ti-c dn" id="c-eth">-0.8%</span></div>
+    <div class="ti"><span class="ti-sym">EUR/USD</span><span class="ti-p" id="p-eu">1.0842</span><span class="ti-c up" id="c-eu">+0.1%</span></div>
+    <div class="ti" style="color:var(--gold)"><span class="ti-sym" style="color:var(--gold)">XAU/USD</span><span class="ti-p" id="p-xau">2 374</span><span class="ti-c up" id="c-xau">+0.6%</span></div>
+  </div>
+  <div class="gold-badge"><div class="pulsedot" style="background:var(--gold)"></div>Gold Sentinel · Actif</div>
+  <div class="ai-badge" style="margin-left:6px"><div class="pulsedot" style="background:var(--ai)"></div>Claude IA</div>
+  <button class="btn btn-ai" onclick="openModal()" style="margin-left:8px">+ Bot</button>
+</div>
+
+<!-- SHELL -->
+<div class="shell">
+  <nav class="sidebar">
+    <div class="s-label">Navigation</div>
+    <div class="s-item active" onclick="goTab('dashboard',this)"><span class="ic">📊</span>Dashboard</div>
+    <div class="s-item" onclick="goTab('bots',this)"><span class="ic">🤖</span>Mes Bots<span class="s-badge g">5</span></div>
+    <div class="s-item" onclick="goTab('gold',this)"><span class="ic">🥇</span>XAU/USD Bot</div>
+    <div class="s-item" onclick="goTab('activity',this)"><span class="ic">⚡</span>Activité<span class="s-badge a">9</span></div>
+    <div class="s-item" onclick="window.open('/paper-trading.html','_blank')" style="color:var(--green)"><span class="ic">📈</span>Paper Trading<span class="s-badge g">Live</span></div>
+    <div class="s-label">IA & Déploiement</div>
+    <div class="s-item" onclick="goTab('deploy',this)"><span class="ic">🚀</span>Déploiement</div>
+    <div class="s-item" onclick="goTab('api',this)"><span class="ic">🔗</span>API Exchange</div>
+    <div class="s-item" onclick="goTab('settings',this)"><span class="ic">⚙️</span>Paramètres</div>
+    <div style="margin-top:auto;padding:8px 0">
+      <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:7px;padding:9px">
+        <div style="font-size:8px;color:var(--t2);margin-bottom:3px">EXCHANGE</div>
+        <div style="display:flex;align-items:center;gap:5px;font-size:10px;color:var(--green);font-weight:600;font-family:var(--mono)"><div class="pulsedot" style="background:var(--green)"></div>Binance · Live</div>
+      </div>
+    </div>
+  </nav>
+
+  <div class="main">
+    <div class="content" id="content"></div>
+
+    <!-- AI PANEL -->
+    <div class="ai-panel">
+      <div class="ai-ph">
+        <span style="font-size:15px">🧠</span>
+        <div><div class="ai-ph-title">Assistant Claude</div><div class="ai-ph-sub">Analyse · Stratégie · Or & Crypto</div></div>
+        <div class="ai-model-tag">Sonnet 4.6</div>
+      </div>
+      <div class="quick-actions">
+        <button class="qa-btn" onclick="askQ('Analyse le XAU/USD maintenant : signal, tendance, risques et recommandation pour le bot Gold Sentinel.')">🥇 Analyse Or</button>
+        <button class="qa-btn" onclick="askQ('Analyse le marché BTC/USDT maintenant et donne le signal pour le bot Alpha RSI.')">₿ Analyse BTC</button>
+        <button class="qa-btn" onclick="askQ('Évalue le risque global de mon portefeuille avec 5 bots actifs et propose des ajustements.')">⚠️ Risque global</button>
+        <button class="qa-btn" onclick="askQ('Quelles sont les corrélations entre XAU/USD et les cryptos en ce moment ? Comment en profiter ?')">🔗 Corrélations</button>
+        <button class="qa-btn" onclick="askQ('Explique en détail comment fonctionne la stratégie RSI+MACD+DXY du bot Gold Sentinel et comment l\'optimiser.')">📊 Gold Strategy</button>
+        <button class="qa-btn" onclick="askQ('Quand le prix de l\'or monte, comment cela affecte en général le BTC et l\'EUR/USD ?')">💡 Or vs Crypto</button>
+      </div>
+      <div class="chat-messages" id="chat-messages">
+        <div class="msg">
+          <div class="msg-av ai">🧠</div>
+          <div>
+            <div class="msg-sender ai">Claude · NexTrade AI</div>
+            <div class="msg-bubble">Bonjour ! Je surveille vos <strong>5 bots</strong> en temps réel, dont le nouveau <strong>Gold Sentinel sur XAU/USD</strong> 🥇<br><br>
+            Le marché de l'or est en phase haussière. XAU/USD teste la résistance <strong>$2 380</strong>. Le bot est bien positionné avec son filtre DXY actif.<br><br>
+            Que souhaitez-vous analyser ?</div>
+          </div>
+        </div>
+      </div>
+      <div class="chat-input-area">
+        <textarea class="chat-input" id="chat-input" placeholder="Posez une question sur l'or, les bots, les marchés..." rows="1" onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+        <button class="send-btn" id="send-btn" onclick="sendMsg()">➤</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL -->
+<div class="modal-overlay" id="modal">
+  <div class="modal">
+    <div class="modal-header">
+      <span>🤖</span><div class="modal-title">Créer un nouveau bot</div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Nom</label><input class="form-input" type="text" placeholder="Mon Bot" id="bot-name-inp"></div>
+        <div class="form-group"><label class="form-label">Marché</label>
+          <select class="form-select" id="bot-mkt">
+            <option>BTC/USDT (Crypto)</option><option>ETH/USDT (Crypto)</option>
+            <option>SOL/USDT (Crypto)</option><option>XAU/USD (Or CFD)</option>
+            <option>EUR/USD (Forex)</option><option>GBP/USD (Forex)</option><option>USD/JPY (Forex)</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group"><label class="form-label">Stratégie</label>
+        <div class="strat-pills" style="display:flex;flex-wrap:wrap;gap:4px">
+          <div class="sp sel" onclick="this.classList.toggle('sel')">RSI</div>
+          <div class="sp" onclick="this.classList.toggle('sel')">MACD</div>
+          <div class="sp" onclick="this.classList.toggle('sel')">Bollinger</div>
+          <div class="sp" onclick="this.classList.toggle('sel')">EMA Cross</div>
+          <div class="sp" onclick="this.classList.toggle('sel')">DXY Filter</div>
+          <div class="sp" onclick="this.classList.toggle('sel')">Grid</div>
+          <div class="sp" onclick="this.classList.toggle('sel')">DCA</div>
+          <div class="sp" onclick="this.classList.toggle('sel')">Momentum</div>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Timeframe</label>
+          <select class="form-select"><option>1min</option><option>5min</option><option selected>15min</option><option>1h</option><option>4h</option><option>1j</option></select>
+        </div>
+        <div class="form-group"><label class="form-label">Capital (USDT)</label><input class="form-input" type="number" value="500"></div>
+      </div>
+      <div class="form-group"><label class="form-label">Levier — <span id="lv">3</span>x</label>
+        <input type="range" min="1" max="20" value="3" oninput="document.getElementById('lv').textContent=this.value">
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Stop-Loss (%)</label><input class="form-input" type="number" value="2"></div>
+        <div class="form-group"><label class="form-label">Take-Profit (%)</label><input class="form-input" type="number" value="4"></div>
+      </div>
+      <div class="api-box">
+        <div style="font-size:10px;font-weight:600;color:var(--t1)">🔗 API Exchange</div>
+        <div class="form-group"><label class="form-label">Exchange</label>
+          <select class="form-select"><option>Binance</option><option>Bybit</option><option>OKX</option><option>Kraken</option></select>
+        </div>
+        <div class="form-group"><label class="form-label">Clé API</label><input class="form-input" type="text" placeholder="Clé publique..."></div>
+        <div class="form-group"><label class="form-label">Secret</label><input class="form-input" type="password" placeholder="••••••••••••••••"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+      <button class="btn btn-ai" onclick="createBot()">🚀 Lancer</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"><span id="toast-msg"></span></div>
+
+<script>
+const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+  ? 'http://localhost:3000'
+  : ''; // Same origin in production
+
+const bots = [
+  {id:1,icon:'🔵',color:'#00D4FF',type:'crypto',name:'Alpha RSI',    desc:'RSI 14 · EMA Cross',   market:'BTC/USDT', strategy:'RSI+EMA',      pnl:'+$1 284',pnlC:'up',trades:142,win:'68%',capital:'$2 000',status:'running'},
+  {id:2,icon:'🟣',color:'#A78BFA',type:'forex', name:'Bollinger FX', desc:'Bollinger 20 · MACD',  market:'EUR/USD',  strategy:'Bollinger+MACD',pnl:'+$512',  pnlC:'up',trades:87, win:'61%',capital:'$1 500',status:'running'},
+  {id:3,icon:'🟡',color:'#FFB300',type:'crypto',name:'Grid ETH',     desc:'Grid Trading · DCA',   market:'ETH/USDT', strategy:'Grid',          pnl:'-$88',   pnlC:'dn',trades:203,win:'54%',capital:'$500',  status:'paused'},
+  {id:4,icon:'🟢',color:'#00E676',type:'forex', name:'Momentum GBP', desc:'Momentum · RSI 21',    market:'GBP/USD',  strategy:'Momentum',      pnl:'+$220',  pnlC:'up',trades:34, win:'71%',capital:'$800',  status:'testing'},
+  {id:5,icon:'🥇',color:'#FFD700',type:'cfd',   name:'Gold Sentinel',desc:'RSI+MACD · DXY Watch', market:'XAU/USD',  strategy:'RSI+MACD+DXY',  pnl:'+$344',  pnlC:'up',trades:58, win:'65%',capital:'$1 200',status:'running'},
+];
+
+const logs = [
+  {type:'gold',text:'<strong>Gold Sentinel</strong> — Achat XAU/USD @ $2 368.50 · Signal RSI 31 + DXY faible',time:'14:38'},
+  {type:'buy', text:'<strong>Alpha RSI</strong> — Achat 0.012 BTC @ $67 420',time:'14:32'},
+  {type:'ai',  text:'<strong>IA Claude</strong> — Or : corrélation DXY inverse confirmée · signal haussier XAU',time:'14:30'},
+  {type:'sell',text:'<strong>Bollinger FX</strong> — Vente EUR/USD @ 1.0850 · +$28',time:'14:28'},
+  {type:'info',text:'<strong>Grid ETH</strong> — Pausé automatiquement (drawdown 3%)',time:'14:15'},
+  {type:'gold',text:'<strong>Gold Sentinel</strong> — TP partiel @ $2 374 · +$44',time:'13:50'},
+  {type:'warn',text:'<strong>Alpha RSI</strong> — Volatilité élevée · exposition réduite',time:'13:44'},
+  {type:'ai',  text:'<strong>IA Claude</strong> — Tensions géopolitiques détectées · XAU/USD surpondéré recommandé',time:'13:30'},
+  {type:'buy', text:'<strong>Momentum GBP</strong> — Achat GBP/USD @ 1.2640',time:'13:20'},
+];
+
+let chatHistory = [];
+let isLoading = false;
+
+// ── TABS ──
+function goTab(tab, el) {
+  document.querySelectorAll('.ntab,.s-item').forEach(n => n.classList.remove('active'));
+  if(el) el.classList.add('active');
+  // sync both nav items
+  document.querySelectorAll('.ntab,.s-item').forEach(n => {
+    const t = n.textContent.trim().toLowerCase();
+    if((tab==='dashboard'&&t.includes('dashboard'))||(tab==='bots'&&t.includes('bots'))||
+       (tab==='gold'&&t.includes('xau'))||(tab==='activity'&&t.includes('activ'))||
+       (tab==='deploy'&&t.includes('déploi'))||(tab==='api'&&t==='api exchange')||
+       (tab==='settings'&&t.includes('param'))) n.classList.add('active');
+  });
+  if(el) el.classList.add('active');
+  renderTab(tab);
+}
+
+function renderTab(t) {
+  const c = document.getElementById('content');
+  if(t==='dashboard') renderDashboard(c);
+  else if(t==='bots') renderBots(c);
+  else if(t==='gold') renderGold(c);
+  else if(t==='activity') renderActivity(c);
+  else if(t==='deploy') renderDeploy(c);
+  else if(t==='api') renderAPITab(c);
+  else c.innerHTML=`<div class="card"><div class="card-body" style="text-align:center;padding:36px;color:var(--t2)"><div style="font-size:32px;margin-bottom:8px">🚧</div><div style="font-size:12px;color:var(--t1);font-weight:600">En développement</div></div></div>`;
+}
+
+function renderDashboard(c) {
+  c.innerHTML = `
+  <div class="stat-grid">
+    <div class="stat-card c-blue"><div class="s-ico">💰</div><div class="s-lbl">Portefeuille</div><div class="s-val">$5 272</div><div class="s-chg up">▲ +41.8%</div></div>
+    <div class="stat-card c-green"><div class="s-ico">📈</div><div class="s-lbl">PnL Total</div><div class="s-val" style="color:var(--green)">+$2 272</div><div class="s-chg up">▲ Meilleur mois</div></div>
+    <div class="stat-card c-gold"><div class="s-ico">🥇</div><div class="s-lbl">PnL Or (XAU)</div><div class="s-val" style="color:var(--gold)">+$344</div><div class="s-chg up">▲ 65% win rate</div></div>
+    <div class="stat-card c-purple"><div class="s-ico">⚡</div><div class="s-lbl">Trades Aujourd'hui</div><div class="s-val">61</div><div class="s-chg up">▲ +14 vs hier</div></div>
+    <div class="stat-card c-ai"><div class="s-ico">🧠</div><div class="s-lbl">Signaux IA</div><div class="s-val" style="color:var(--ai)">18</div><div class="s-chg up">▲ 14 validés</div></div>
+  </div>
+
+  <div class="analysis-card">
+    <div class="analysis-header"><span>🧠</span><div class="analysis-title">Analyse IA — Marché en temps réel</div><div class="ai-model-tag" style="margin-left:auto">Claude</div></div>
+    <div class="analysis-body">BTC maintient sa dynamique haussière (RSI 58). <strong>XAU/USD</strong> en forte progression : le Dollar Index (DXY) faiblit à 104.2, ce qui pousse l'or vers la résistance <strong>$2 380</strong>. Le bot Gold Sentinel a capturé +$44 ce matin sur TP partiel. <strong>EUR/USD</strong> consolide — attente du discours Fed. Recommandation : maintenir les 4 bots actifs, laisser Gold Sentinel en mode agressif.</div>
+    <div class="analysis-scores">
+      <div class="ascore"><div class="ascore-val" style="color:var(--green)">68</div><div class="ascore-lbl">BTC Signal</div></div>
+      <div class="ascore"><div class="ascore-val" style="color:var(--gold)">78</div><div class="ascore-lbl">Or Signal</div></div>
+      <div class="ascore"><div class="ascore-val" style="color:var(--amber)">44</div><div class="ascore-lbl">EUR Signal</div></div>
+      <div class="ascore"><div class="ascore-val" style="color:var(--green)">73</div><div class="ascore-lbl">Global</div></div>
+    </div>
+  </div>
+
+  <div class="two-col">
+    <div class="card">
+      <div class="card-header"><div><div class="card-title">Performance 30 jours</div><div class="card-sub">Portefeuille total</div></div></div>
+      <div class="card-body"><canvas id="perfChart" height="150"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-header"><div class="card-title">Activité récente</div></div>
+      <div class="card-body" style="padding:0 13px">
+        ${logs.slice(0,5).map(l=>`<div class="log-item"><div class="log-dot ${l.type}"></div><div class="log-text">${l.text}</div><div class="log-time">${l.time}</div></div>`).join('')}
+      </div>
+    </div>
+  </div>
+
+  <!-- Paper Trading Card -->
+  <div class="card" style="background:linear-gradient(135deg,rgba(0,230,118,.05),rgba(0,212,255,.03));border-color:rgba(0,230,118,.2)">
+    <div class="card-header">
+      <span style="font-size:16px">📈</span>
+      <div><div class="card-title" style="color:var(--green)">Paper Trading — Données Live</div><div class="card-sub">Testez les stratégies des bots avec $10 000 virtuels · Prix Binance temps réel</div></div>
+      <div class="ch-actions">
+        <button class="btn btn-ghost" style="border-color:rgba(0,230,118,.3);color:var(--green)" onclick="window.open('/paper-trading.html','_blank')">📈 Ouvrir le simulateur →</button>
+      </div>
+    </div>
+    <div class="card-body" style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
+      ${[
+        {icon:'₿',label:'BTC/USDT',desc:'Bot Alpha RSI · RSI+EMA',color:'var(--accent)'},
+        {icon:'🥇',label:'XAU/USD',desc:'Gold Sentinel · RSI+MACD+DXY',color:'var(--gold)'},
+        {icon:'€',label:'EUR/USD',desc:'Bollinger FX · Bollinger+MACD',color:'var(--amber)'},
+      ].map(m=>`
+      <div style="background:var(--bg-3);border:1px solid var(--border);border-radius:8px;padding:10px;cursor:pointer;transition:border-color .15s" onclick="window.open('/paper-trading.html','_blank')" onmouseover="this.style.borderColor='rgba(0,230,118,.3)'" onmouseout="this.style.borderColor='var(--border)'">
+        <div style="font-size:18px;margin-bottom:5px">${m.icon}</div>
+        <div style="font-size:11px;font-weight:700;color:${m.color}">${m.label}</div>
+        <div style="font-size:9px;color:var(--t2);margin-top:2px">${m.desc}</div>
+        <div style="font-size:9px;color:var(--green);margin-top:5px;font-weight:600">▶ Trader en paper</div>
+      </div>`).join('')}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><div><div class="card-title">Tous les bots</div></div><div class="ch-actions"><button class="btn btn-ai" onclick="openModal()">+ Nouveau Bot</button></div></div>
+    ${botsTable()}
+  </div>`;
+  setTimeout(drawChart, 60);
+}
+
+function renderBots(c) {
+  c.innerHTML = `
+  <div class="stat-grid">
+    <div class="stat-card c-blue"><div class="s-lbl">Bots actifs</div><div class="s-val">3</div></div>
+    <div class="stat-card c-green"><div class="s-lbl">Capital déployé</div><div class="s-val">$6 000</div></div>
+    <div class="stat-card c-gold"><div class="s-lbl">Bot Or (XAU)</div><div class="s-val" style="color:var(--gold)">Actif 🥇</div></div>
+    <div class="stat-card c-ai"><div class="s-lbl">Signaux IA reçus</div><div class="s-val" style="color:var(--ai)">42</div></div>
+    <div class="stat-card c-purple"><div class="s-lbl">Total trades</div><div class="s-val">524</div></div>
+  </div>
+  <div class="card">
+    <div class="card-header"><div><div class="card-title">Mes Bots</div></div><div class="ch-actions"><button class="btn btn-ai" onclick="openModal()">+ Nouveau Bot</button></div></div>
+    ${botsTable()}
+  </div>`;
+}
+
+function botsTable() {
+  return `
+  <div class="tbl-head"><div></div><div>Bot</div><div>Marché</div><div>PnL</div><div>Win%</div><div>Capital</div><div>Statut</div></div>
+  <div class="card-body" style="display:flex;flex-direction:column;gap:7px">
+    ${bots.map(b=>`
+    <div class="bot-row ${b.type==='cfd'?'gold-bot':''}">
+      <div class="b-av" style="background:${b.color}22;border:1px solid ${b.color}44">${b.icon}</div>
+      <div><div class="b-name">${b.name}${b.type==='cfd'?' <span style="font-size:9px;color:var(--gold)">🥇 Or</span>':''}</div><div class="b-desc">${b.desc}</div></div>
+      <div><span class="tag tag-${b.type}">${b.market}</span></div>
+      <div class="pnl ${b.pnlC}">${b.pnl}</div>
+      <div><div class="b-cl">Win Rate</div><div class="b-cv">${b.win}</div></div>
+      <div><div class="b-cl">Capital</div><div class="b-cv">${b.capital}</div></div>
+      <div class="row-actions">
+        <button class="toggle ${b.status==='running'?'on':'off'}" onclick="toggleBot(this,${b.id})"></button>
+        <span class="tag ${b.status==='running'?'tag-run':b.status==='paused'?'tag-pause':'tag-test'}">${b.status==='running'?'Actif':b.status==='paused'?'Pausé':'Test'}</span>
+        <button class="ico-btn ${b.type==='cfd'?'gold-b':'ai-b'}" title="Analyser" onclick="askQ('Analyse en détail le bot ${b.name} sur ${b.market} : signal actuel, performance, risques et recommandations.')">🧠</button>
+      </div>
+    </div>`).join('')}
+  </div>`;
+}
+
+function renderGold(c) {
+  c.innerHTML = `
+  <div class="gold-card">
+    <div class="gold-header"><span style="font-size:20px">🥇</span><div class="gold-title">Gold Sentinel — Bot XAU/USD</div><div class="ai-model-tag" style="margin-left:auto;background:var(--gold-dim);border-color:var(--gold-glow);color:var(--gold)">CFD Or</div></div>
+    <div class="gold-body">
+      Le bot <strong>Gold Sentinel</strong> trade l'or spot (XAU/USD) en utilisant une stratégie triple : <strong>RSI(14)</strong> pour les entrées de retournement, <strong>MACD(12,26,9)</strong> pour confirmer la tendance, et un <strong>filtre DXY</strong> (Dollar Index) pour éviter les faux signaux — quand le dollar monte, le bot réduit son exposition longue sur l'or.<br><br>
+      <strong>Logique :</strong> L'or et le dollar sont inversement corrélés. Quand le DXY baisse (&lt; MA50), le signal haussier sur XAU est renforcé. Le bot intègre aussi une fenêtre d'exclusion autour des publications macro (NFP, CPI, FOMC).
+    </div>
+  </div>
+
+  <div class="stat-grid" style="grid-template-columns:repeat(4,1fr)">
+    <div class="stat-card c-gold"><div class="s-ico">💰</div><div class="s-lbl">PnL Total</div><div class="s-val" style="color:var(--gold)">+$344</div><div class="s-chg up">▲ +28.7% ROI</div></div>
+    <div class="stat-card c-green"><div class="s-ico">🎯</div><div class="s-lbl">Win Rate</div><div class="s-val">65%</div><div class="s-chg up">▲ 38/58 trades</div></div>
+    <div class="stat-card c-blue"><div class="s-ico">⚡</div><div class="s-lbl">Trades</div><div class="s-val">58</div><div class="s-chg up">▲ Actif depuis 14j</div></div>
+    <div class="stat-card c-purple"><div class="s-ico">🛡️</div><div class="s-lbl">Drawdown Max</div><div class="s-val" style="color:var(--red)">-2.1%</div><div class="s-chg up">▲ Bien contenu</div></div>
+  </div>
+
+  <div class="two-col">
+    <div class="card">
+      <div class="card-header"><div><div class="card-title">Performance XAU/USD</div><div class="card-sub">14 derniers jours</div></div></div>
+      <div class="card-body"><canvas id="goldChart" height="150"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-header"><div class="card-title">Configuration Gold Sentinel</div></div>
+      <div class="card-body" style="display:flex;flex-direction:column;gap:9px;font-size:11px">
+        ${[['Marché','XAU/USD (Or CFD)'],['Stratégie','RSI(14) + MACD(12,26,9) + DXY'],['Timeframe','15 minutes'],['Capital alloué','$1 200 USDT'],['Levier','2x'],['Stop-Loss','1.8%'],['Take-Profit','3.5%'],['Filtre DXY','Actif (MA50)'],['Exclusion news','NFP, CPI, FOMC'],['Exchange','Binance (CFD)']].map(([k,v])=>`
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border)">
+          <span style="color:var(--t2);font-size:10px">${k}</span>
+          <span style="color:var(--t0);font-weight:600;font-family:var(--mono);font-size:10px">${v}</span>
+        </div>`).join('')}
+        <button class="btn btn-gold" style="margin-top:4px;width:100%" onclick="askQ('Donne-moi des suggestions pour optimiser le bot Gold Sentinel sur XAU/USD : paramètres RSI, MACD, gestion du DXY et gestion du risque.')">🧠 Optimiser avec IA</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><div class="card-title">Trades récents — Gold Sentinel</div></div>
+    <div class="card-body" style="padding:0 13px">
+      ${[
+        {type:'sell',text:'<strong>Vente</strong> XAU/USD @ $2 374.20 · TP atteint · <span style="color:var(--green)">+$44.50</span>',time:'14:38'},
+        {type:'buy', text:'<strong>Achat</strong> XAU/USD @ $2 368.50 · RSI=31, DXY faible, MACD haussier',time:'13:50'},
+        {type:'sell',text:'<strong>Vente</strong> XAU/USD @ $2 361.00 · SL touché · <span style="color:var(--red)">-$21.60</span>',time:'10:12'},
+        {type:'buy', text:'<strong>Achat</strong> XAU/USD @ $2 352.80 · Signal triple confirmé',time:'09:30'},
+        {type:'sell',text:'<strong>Vente</strong> XAU/USD @ $2 369.40 · TP · <span style="color:var(--green)">+$83.20</span>',time:'Hier 15:40'},
+      ].map(l=>`<div class="log-item"><div class="log-dot ${l.type}"></div><div class="log-text">${l.text}</div><div class="log-time">${l.time}</div></div>`).join('')}
+    </div>
+  </div>`;
+  setTimeout(()=>drawGoldChart(), 60);
+}
+
+function renderActivity(c) {
+  c.innerHTML = `<div class="card">
+    <div class="card-header"><div class="card-title">Journal d'activité</div><span class="tag tag-cfd" style="margin-left:8px">🥇 Or inclus</span><span class="tag tag-ai" style="margin-left:4px;background:var(--ai-dim);color:var(--ai);border-color:var(--ai-glow)">IA incluse</span></div>
+    <div class="card-body" style="padding:0 13px">
+      ${logs.map(l=>`<div class="log-item"><div class="log-dot ${l.type}"></div><div class="log-text">${l.text}</div><div class="log-time">${l.time}</div></div>`).join('')}
+    </div>
+  </div>`;
+}
+
+function renderAPITab(c) {
+  c.innerHTML = `<div class="card">
+    <div class="card-header"><div class="card-title">Connexions API</div></div>
+    <div class="card-body" style="display:flex;flex-direction:column;gap:8px">
+      ${['Binance','Bybit','OKX','Kraken'].map((ex,i)=>`
+      <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:8px;padding:11px 13px;display:flex;align-items:center;gap:11px">
+        <div style="font-size:17px">${['🟡','🟠','⚫','🔵'][i]}</div>
+        <div style="flex:1"><div style="font-size:11px;font-weight:600">${ex}</div><div style="font-size:9px;color:var(--t2);margin-top:1px">${i===0?'Connecté — lecture/écriture':'Non configuré'}</div></div>
+        ${i===0?`<div style="font-size:9px;color:var(--green);font-weight:600;display:flex;align-items:center;gap:4px"><div class="pulsedot" style="background:var(--green)"></div>Actif</div>`:''}
+        <button class="btn ${i===0?'btn-ghost':'btn-primary'}" style="padding:5px 10px;font-size:9px">${i===0?'Modifier':'Connecter'}</button>
+      </div>`).join('')}
+    </div>
+  </div>`;
+}
+
+function renderDeploy(c) {
+  c.innerHTML = `
+  <div class="card">
+    <div class="card-header">
+      <span style="font-size:16px">🚀</span>
+      <div><div class="card-title">Déploiement en ligne — Guide complet</div><div class="card-sub">3 options pour mettre NexTrade AI en production</div></div>
+    </div>
+    <div class="card-body">
+
+      <!-- Option 1: Railway -->
+      <div style="margin-bottom:20px">
+        <div style="font-size:12px;font-weight:700;color:var(--accent);margin-bottom:10px;display:flex;align-items:center;gap:6px">🥇 Option 1 — Railway <span style="font-size:9px;background:var(--green-dim);color:var(--green);border:1px solid rgba(0,230,118,.2);padding:2px 7px;border-radius:10px;font-weight:600">Recommandé · Gratuit</span></div>
+        <div class="deploy-step"><div class="deploy-num">1</div><div class="deploy-content"><div class="deploy-title">Créez un compte Railway</div><div class="deploy-desc">Allez sur <strong>railway.app</strong>, connectez-vous avec GitHub (gratuit, 5$/mois de crédit offert).</div></div></div>
+        <div class="deploy-step"><div class="deploy-num">2</div><div class="deploy-content"><div class="deploy-title">Uploadez les fichiers</div><div class="deploy-desc">Créez un dépôt GitHub avec les fichiers <code>server.js</code>, <code>package.json</code> et le dossier <code>public/</code>.<div class="code-block">📁 nextrade/
+├── server.js
+├── package.json
+├── .env
+└── public/
+    └── index.html</div></div></div></div>
+        <div class="deploy-step"><div class="deploy-num">3</div><div class="deploy-content"><div class="deploy-title">Configurez les variables d'environnement</div><div class="deploy-desc">Dans Railway, ajoutez vos variables :<div class="code-block"><button class="copy-btn" onclick="copyText('ANTHROPIC_API_KEY=sk-ant-votre_cle\nPORT=3000\nNODE_ENV=production')">Copier</button>ANTHROPIC_API_KEY=sk-ant-votre_cle_ici<br>PORT=3000<br>NODE_ENV=production</div></div></div></div>
+        <div class="deploy-step"><div class="deploy-num">4</div><div class="deploy-content"><div class="deploy-title">Déployez en 1 clic</div><div class="deploy-desc">Railway détecte automatiquement Node.js et déploie. Votre app sera disponible sur une URL du type :<div class="code-block">https://nextrade-ai.railway.app</div></div></div></div>
+      </div>
+
+      <!-- Option 2: Render -->
+      <div style="margin-bottom:20px;border-top:1px solid var(--border);padding-top:16px">
+        <div style="font-size:12px;font-weight:700;color:var(--purple);margin-bottom:10px;display:flex;align-items:center;gap:6px">🥈 Option 2 — Render <span style="font-size:9px;background:var(--purple-dim);color:var(--purple);border:1px solid rgba(167,139,250,.2);padding:2px 7px;border-radius:10px;font-weight:600">Gratuit</span></div>
+        <div class="deploy-step"><div class="deploy-num">1</div><div class="deploy-content"><div class="deploy-title">render.com → New Web Service</div><div class="deploy-desc">Connectez votre GitHub et sélectionnez le dépôt nextrade.</div></div></div>
+        <div class="deploy-step"><div class="deploy-num">2</div><div class="deploy-content"><div class="deploy-title">Configurez le build</div><div class="deploy-desc"><div class="code-block">Build command: npm install<br>Start command: node server.js</div></div></div></div>
+        <div class="deploy-step"><div class="deploy-num">3</div><div class="deploy-content"><div class="deploy-title">Variables d'environnement + Deploy</div><div class="deploy-desc">Ajoutez ANTHROPIC_API_KEY dans Environment → Deploy. URL fournie automatiquement.</div></div></div>
+      </div>
+
+      <!-- Option 3: VPS -->
+      <div style="border-top:1px solid var(--border);padding-top:16px">
+        <div style="font-size:12px;font-weight:700;color:var(--amber);margin-bottom:10px;display:flex;align-items:center;gap:6px">🥉 Option 3 — VPS (OVH / DigitalOcean) <span style="font-size:9px;background:var(--amber-dim);color:var(--amber);border:1px solid rgba(255,179,0,.2);padding:2px 7px;border-radius:10px;font-weight:600">Avancé · ~5€/mois</span></div>
+        <div class="deploy-step"><div class="deploy-num">1</div><div class="deploy-content"><div class="deploy-title">Installez Node.js sur le serveur</div><div class="deploy-desc"><div class="code-block"><button class="copy-btn" onclick="copyText('curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -\nsudo apt-get install -y nodejs')">Copier</button>curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -<br>sudo apt-get install -y nodejs</div></div></div></div>
+        <div class="deploy-step"><div class="deploy-num">2</div><div class="deploy-content"><div class="deploy-title">Clonez et configurez</div><div class="deploy-desc"><div class="code-block"><button class="copy-btn" onclick="copyText('git clone https://github.com/votre-repo/nextrade.git\ncd nextrade && npm install\ncp .env.example .env\nnano .env  # ajoutez votre clé Claude')">Copier</button>git clone https://github.com/votre-repo/nextrade.git<br>cd nextrade && npm install<br>cp .env.example .env && nano .env</div></div></div></div>
+        <div class="deploy-step"><div class="deploy-num">3</div><div class="deploy-content"><div class="deploy-title">Lancez avec PM2 (process manager)</div><div class="deploy-desc"><div class="code-block"><button class="copy-btn" onclick="copyText('npm install -g pm2\npm2 start server.js --name nextrade\npm2 startup && pm2 save')">Copier</button>npm install -g pm2<br>pm2 start server.js --name nextrade<br>pm2 startup && pm2 save</div></div></div></div>
+      </div>
+
+      <div style="background:var(--ai-dim);border:1px solid var(--ai-glow);border-radius:9px;padding:12px;margin-top:14px;font-size:11px;color:var(--t1);line-height:1.7">
+        <strong style="color:var(--ai)">🧠 Conseil IA :</strong> Pour un projet professionnel, Railway est le choix le plus simple et rapide. Votre clé Anthropic est sécurisée côté serveur — elle ne sera jamais exposée aux utilisateurs. Une fois en ligne, partagez l'URL et votre plateforme NexTrade AI avec Claude intégré est accessible depuis n'importe quel appareil.
+      </div>
+    </div>
+  </div>`;
+}
+
+// ── CHARTS ──
+function drawChart() {
+  const canvas = document.getElementById('perfChart');
+  if(!canvas) return;
+  const W = canvas.parentElement.offsetWidth - 26;
+  canvas.width = W; canvas.height = 150;
+  const ctx = canvas.getContext('2d');
+  const data = [3000,3150,3080,3320,3480,3400,3600,3780,3900,4000,4100,4280,4500,4600,4700,4800,4900,4928,5050,5100,5080,5150,5200,5180,5272];
+  paint(ctx, data, W, 150, '#00D4FF');
+}
+function drawGoldChart() {
+  const canvas = document.getElementById('goldChart');
+  if(!canvas) return;
+  const W = canvas.parentElement.offsetWidth - 26;
+  canvas.width = W; canvas.height = 150;
+  const ctx = canvas.getContext('2d');
+  const data = [1200,1230,1210,1260,1240,1280,1270,1300,1290,1320,1310,1340,1344];
+  paint(ctx, data, W, 150, '#FFD700');
+}
+function paint(ctx, data, W, H, color) {
+  const min = Math.min(...data)*.98, max = Math.max(...data)*1.01;
+  const pts = data.map((v,i)=>({x:14+i*(W-28)/(data.length-1),y:H-20-(v-min)/(max-min)*(H-30)}));
+  const grad = ctx.createLinearGradient(0,0,0,H);
+  grad.addColorStop(0,color+'28'); grad.addColorStop(1,color+'00');
+  ctx.beginPath(); ctx.moveTo(pts[0].x,H-20);
+  pts.forEach(p=>ctx.lineTo(p.x,p.y)); ctx.lineTo(pts[pts.length-1].x,H-20);
+  ctx.fillStyle=grad; ctx.fill();
+  ctx.beginPath(); pts.forEach((p,i)=>i===0?ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y));
+  ctx.strokeStyle=color; ctx.lineWidth=2; ctx.stroke();
+  const l=pts[pts.length-1];
+  ctx.beginPath(); ctx.arc(l.x,l.y,4,0,Math.PI*2); ctx.fillStyle=color; ctx.fill();
+}
+
+// ── TICKER LIVE ──
+const bases = {btc:67420,eth:3521,eu:1.0842,xau:2374.50};
+function updateTickers() {
+  [{id:'btc',dec:0,pct:.003},{id:'eth',dec:0,pct:.003},{id:'eu',dec:4,pct:.0004},{id:'xau',dec:2,pct:.002}].forEach(it=>{
+    const pe=document.getElementById('p-'+it.id),ce=document.getElementById('c-'+it.id);
+    if(!pe) return;
+    const cur=parseFloat(pe.textContent.replace(/\s/g,'').replace(',','.'));
+    const nv=cur+cur*it.pct*(Math.random()-.47);
+    pe.textContent=it.dec===0?Math.round(nv).toLocaleString('fr-FR'):nv.toFixed(it.dec);
+    const pct=(nv-bases[it.id])/bases[it.id]*100;
+    ce.textContent=(pct>=0?'+':'')+pct.toFixed(1)+'%';
+    ce.className='ti-c '+(pct>=0?'up':'dn');
+  });
+}
+setInterval(updateTickers, 2000);
+
+// ── TOGGLE BOT ──
+function toggleBot(btn,id) {
+  btn.classList.toggle('on'); btn.classList.toggle('off');
+  const tag=btn.nextElementSibling;
+  const on=btn.classList.contains('on');
+  tag.textContent=on?'Actif':'Pausé';
+  tag.className='tag '+(on?'tag-run':'tag-pause');
+  showToast(on?`✅ Bot #${id} activé`:`⏸️ Bot #${id} mis en pause`);
+  try { fetch(`${API_BASE}/api/bots/${id}/toggle`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({active:on})}); } catch(e){}
+}
+
+// ── MODAL ──
+function openModal(){document.getElementById('modal').classList.add('open')}
+function closeModal(){document.getElementById('modal').classList.remove('open')}
+document.getElementById('modal').addEventListener('click',e=>{if(e.target===e.currentTarget)closeModal()});
+function createBot(){
+  const name=document.getElementById('bot-name-inp').value||'Nouveau Bot';
+  const mkt=document.getElementById('bot-mkt').value;
+  closeModal();
+  showToast(`🤖 Bot "${name}" lancé !`);
+  setTimeout(()=>askQ(`Le bot "${name}" vient d'être créé sur ${mkt}. Donne 3 conseils d'optimisation immédiats pour ce marché et cette configuration.`),800);
+}
+
+// ── TOAST ──
+function showToast(msg){
+  const t=document.getElementById('toast');
+  document.getElementById('toast-msg').textContent=msg;
+  t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),3000);
+}
+
+// ── COPY ──
+function copyText(text){navigator.clipboard?.writeText(text);showToast('📋 Copié !')}
+
+// ── CHAT ──
+function handleKey(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMsg()}}
+function autoResize(el){el.style.height='auto';el.style.height=Math.min(el.scrollHeight,70)+'px'}
+function askQ(q){document.getElementById('chat-input').value=q;sendMsg()}
+
+async function sendMsg() {
+  if(isLoading) return;
+  const input=document.getElementById('chat-input');
+  const msg=input.value.trim(); if(!msg) return;
+  input.value=''; input.style.height='auto';
+  appendMsg('user','👤','Vous',msg);
+  chatHistory.push({role:'user',content:msg});
+  isLoading=true; document.getElementById('send-btn').disabled=true;
+
+  const tid='t'+Date.now();
+  const tel=document.createElement('div'); tel.id=tid; tel.className='msg';
+  tel.innerHTML=`<div class="msg-av ai">🧠</div><div><div class="msg-sender ai">Claude · NexTrade AI</div><div class="msg-bubble"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div></div>`;
+  document.getElementById('chat-messages').appendChild(tel); scrollChat();
+
+  try {
+    // Try backend first, fallback to direct API
+    let reply;
+    try {
+      const r=await fetch(`${API_BASE}/api/chat`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages:chatHistory})});
+      if(r.ok){const d=await r.json();reply=d.reply;}
+    } catch(e){}
+
+    if(!reply) {
+      // Direct API call (for demo — in production use backend)
+      const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:1000,system:`Tu es un expert en trading algorithmique sur la plateforme NexTrade AI. Tu connais parfaitement les marchés crypto (BTC, ETH), Forex (EUR/USD, GBP/USD) et l'or (XAU/USD CFD). Tu suis 5 bots dont le Gold Sentinel qui trade XAU/USD avec RSI+MACD+DXY. Portefeuille actuel : $5 272 (+41.8%). Réponds en français, de façon concise et experte.`,messages:chatHistory})});
+      const d=await r.json(); reply=d.content?.[0]?.text||'Erreur API.';
+    }
+
+    document.getElementById(tid)?.remove();
+    appendMsg('ai','🧠','Claude · NexTrade AI',reply);
+    chatHistory.push({role:'assistant',content:reply});
+  } catch(err) {
+    document.getElementById(tid)?.remove();
+    appendMsg('ai','🧠','Claude · NexTrade AI','⚠️ Configurez votre clé API dans le fichier <strong>.env</strong> (ANTHROPIC_API_KEY) et relancez le serveur Node.js.');
+  }
+  isLoading=false; document.getElementById('send-btn').disabled=false;
+}
+
+function appendMsg(role,av,sender,text) {
+  const el=document.createElement('div'); el.className='msg';
+  const fmt=text.replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>').replace(/\n/g,'<br>');
+  el.innerHTML=`<div class="msg-av ${role}">${av}</div><div><div class="msg-sender ${role}">${sender}</div><div class="msg-bubble">${fmt}</div></div>`;
+  document.getElementById('chat-messages').appendChild(el); scrollChat();
+}
+
+function scrollChat(){const m=document.getElementById('chat-messages');setTimeout(()=>m.scrollTop=m.scrollHeight,50)}
+
+// ── INIT ──
+renderTab('dashboard');
+window.addEventListener('resize',()=>{
+  if(document.getElementById('perfChart'))drawChart();
+  if(document.getElementById('goldChart'))drawGoldChart();
+});
+
+// ── AUTO-OPEN AI FROM PAPER TRADING ──
+(function() {
+  const params = new URLSearchParams(window.location.search);
+  const aiQ = params.get('ai');
+  if (aiQ) {
+    // Slight delay to let chat panel render
+    setTimeout(() => {
+      const input = document.getElementById('chat-input');
+      if (input) {
+        input.value = decodeURIComponent(aiQ);
+        autoResize(input);
+        sendMsg();
+        // Clean URL
+        window.history.replaceState({}, '', '/');
+        showToast('🧠 Question envoyée à Claude depuis le Paper Trading');
+      }
+    }, 800);
+  }
+})();
+</script>
+</body>
+</html>
