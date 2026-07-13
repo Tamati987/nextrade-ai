@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NexTrade AI — 19€/mois</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap');
+:root{
+  --bg:#050810;--bg1:#0A0F1E;--bg2:#0F1828;--bg3:#162035;
+  --border:#1A2840;--border-hi:#243860;
+  --accent:#00D4FF;--accent-dim:rgba(0,212,255,.1);
+  --green:#00E676;--green-dim:rgba(0,230,118,.1);
+  --gold:#FFD700;--gold-dim:rgba(255,215,0,.08);--gold-glow:rgba(255,215,0,.2);
+  --ai:#C084FC;--ai-dim:rgba(192,132,252,.1);--ai-glow:rgba(192,132,252,.2);
+  --red:#FF3D57;--t0:#EEF4FF;--t1:#8FA8CC;--t2:#3A5070;
+  --pp:#009CDE;--pp-dark:#003087;
+  --sans:'Inter',sans-serif;--mono:'JetBrains Mono',monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--t0);font-family:var(--sans);min-height:100vh;overflow-x:hidden}
+body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellipse at 20% 20%,rgba(0,212,255,.04),transparent 60%),radial-gradient(ellipse at 80% 80%,rgba(192,132,252,.05),transparent 60%);pointer-events:none;z-index:0}
+
+/* ── NAV ── */
+nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:14px 24px;display:flex;align-items:center;gap:12px;background:rgba(5,8,16,.88);backdrop-filter:blur(14px);border-bottom:1px solid var(--border)}
+.logo{display:flex;align-items:center;gap:8px;font-size:16px;font-weight:800;text-decoration:none;color:var(--t0)}
+.logo-icon{width:30px;height:30px;background:linear-gradient(135deg,var(--accent),var(--ai));border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:15px}
+.logo span{color:var(--ai)}
+.spacer{flex:1}
+.btn{padding:8px 16px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;border:none;font-family:var(--sans);transition:all .15s;display:inline-flex;align-items:center;gap:6px;text-decoration:none}
+.btn-ghost{background:transparent;border:1px solid var(--border-hi);color:var(--t1)}
+.btn-ghost:hover{border-color:var(--accent);color:var(--accent)}
+.btn-primary{background:linear-gradient(135deg,var(--accent),#0070FF);color:#000}
+.btn-primary:hover{opacity:.9;transform:translateY(-1px)}
+.nav-link{font-size:13px;color:var(--t1);cursor:pointer;padding:6px 10px;border-radius:6px;border:none;background:none;font-family:var(--sans);transition:color .15s}
+.nav-link:hover{color:var(--t0)}
+.user-badge{display:flex;align-items:center;gap:8px;padding:5px 12px;border-radius:8px;background:var(--bg2);border:1px solid var(--border);font-size:12px;color:var(--t1)}
+
+/* ── HERO ── */
+.hero{padding:130px 24px 70px;text-align:center;position:relative;z-index:1}
+.hero-badge{display:inline-flex;align-items:center;gap:6px;padding:5px 14px;border-radius:20px;background:var(--ai-dim);border:1px solid var(--ai-glow);font-size:12px;font-weight:600;color:var(--ai);margin-bottom:24px}
+.pulse{width:6px;height:6px;border-radius:50%;background:var(--ai);animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+h1{font-size:clamp(30px,5vw,54px);font-weight:800;line-height:1.15;margin-bottom:18px;letter-spacing:-1px}
+h1 .grad{background:linear-gradient(135deg,var(--accent),var(--ai));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+h1 .gold{background:linear-gradient(135deg,var(--gold),#FFA000);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.hero-sub{font-size:17px;color:var(--t1);max-width:540px;margin:0 auto 36px;line-height:1.65}
+.hero-stats{display:flex;gap:36px;justify-content:center;margin-top:44px;flex-wrap:wrap}
+.hstat-val{font-size:28px;font-weight:800;font-family:var(--mono)}
+.hstat-lbl{font-size:11px;color:var(--t2);margin-top:3px}
+
+/* ── FEATURES ── */
+.section{padding:64px 24px;position:relative;z-index:1;max-width:1040px;margin:0 auto}
+.section-label{font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--accent);margin-bottom:8px;text-align:center}
+.section-title{font-size:clamp(22px,3vw,34px);font-weight:800;letter-spacing:-.5px;text-align:center;margin-bottom:8px}
+.section-sub{font-size:14px;color:var(--t1);text-align:center;margin-bottom:40px}
+.features-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}
+.feat{background:var(--bg2);border:1px solid var(--border);border-radius:13px;padding:22px;transition:all .2s}
+.feat:hover{border-color:var(--border-hi);transform:translateY(-2px)}
+.feat-icon{font-size:26px;margin-bottom:12px}
+.feat-title{font-size:14px;font-weight:700;margin-bottom:6px}
+.feat-desc{font-size:12px;color:var(--t1);line-height:1.6}
+
+/* ── PRICING ── */
+.pricing-section{padding:64px 24px;position:relative;z-index:1}
+.pricing-wrap{max-width:440px;margin:0 auto}
+
+.price-card{background:linear-gradient(145deg,var(--bg2),var(--bg3));border:2px solid var(--accent);border-radius:22px;overflow:hidden;box-shadow:0 0 80px rgba(0,212,255,.08),0 20px 60px rgba(0,0,0,.4)}
+
+.price-top{padding:30px 28px 24px;text-align:center;background:linear-gradient(160deg,rgba(0,212,255,.06),rgba(192,132,252,.04))}
+.price-plan-tag{display:inline-flex;align-items:center;gap:5px;padding:4px 12px;border-radius:14px;background:var(--accent-dim);border:1px solid rgba(0,212,255,.2);font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--accent);margin-bottom:16px}
+.price-num{font-size:60px;font-weight:800;font-family:var(--mono);line-height:1;color:var(--t0)}
+.price-num sup{font-size:22px;font-weight:600;color:var(--t1);vertical-align:top;margin-top:12px;display:inline-block}
+.price-per{font-size:13px;color:var(--t2);margin-top:5px}
+.price-tagline{display:inline-block;background:var(--green-dim);border:1px solid rgba(0,230,118,.2);color:var(--green);font-size:11px;font-weight:600;padding:3px 11px;border-radius:12px;margin-top:10px}
+
+.price-feats{padding:22px 28px;display:flex;flex-direction:column;gap:11px;border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
+.pf{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--t0)}
+.pf-ic{width:19px;height:19px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;flex-shrink:0}
+.ic-g{background:var(--green-dim);border:1px solid rgba(0,230,118,.25);color:var(--green)}
+.ic-gold{background:var(--gold-dim);border:1px solid rgba(255,215,0,.25);color:var(--gold)}
+.ic-ai{background:var(--ai-dim);border:1px solid var(--ai-glow);color:var(--ai)}
+
+/* ── PAYPAL BTN ── */
+.price-cta{padding:24px 28px 28px}
+
+.paypal-btn-wrap{position:relative}
+.paypal-btn{
+  width:100%;padding:16px 20px;border-radius:12px;border:none;cursor:pointer;
+  background:linear-gradient(135deg,#009CDE,#003087);
+  display:flex;align-items:center;justify-content:center;gap:10px;
+  font-size:16px;font-weight:700;color:#fff;font-family:var(--sans);
+  transition:all .2s;box-shadow:0 4px 24px rgba(0,140,200,.3);
+  position:relative;overflow:hidden;
+}
+.paypal-btn::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(255,255,255,.1),transparent);pointer-events:none}
+.paypal-btn:hover{transform:translateY(-2px);box-shadow:0 8px 32px rgba(0,140,200,.4)}
+.paypal-btn:active{transform:translateY(0)}
+.paypal-btn:disabled{opacity:.6;cursor:not-allowed;transform:none}
+.paypal-logo{height:20px;vertical-align:middle}
+
+.payment-methods{display:flex;align-items:center;justify-content:center;gap:8px;margin-top:12px;flex-wrap:wrap}
+.pm-label{font-size:10px;color:var(--t2)}
+.pm-icons{display:flex;gap:5px;align-items:center}
+.pm-card{background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:3px 7px;font-size:9px;font-weight:700;color:var(--t1);letter-spacing:.3px}
+.pm-card.visa{color:#1A1F71}
+.pm-card.mc{color:#EB001B}
+.pm-card.amex{color:#007BC1}
+
+.security-note{display:flex;align-items:center;justify-content:center;gap=5px;margin-top:10px;font-size:10px;color:var(--t2);text-align:center;gap:5px}
+.security-note span{color:var(--green)}
+
+/* ── AUTH MODAL ── */
+.overlay{position:fixed;inset:0;background:rgba(5,8,16,.92);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;z-index:200;opacity:0;pointer-events:none;transition:opacity .2s}
+.overlay.open{opacity:1;pointer-events:all}
+.modal{background:var(--bg2);border:1px solid var(--border-hi);border-radius:16px;width:360px;transform:translateY(20px);transition:transform .2s}
+.overlay.open .modal{transform:translateY(0)}
+.mh{padding:18px 20px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}
+.mh-title{font-size:15px;font-weight:700}
+.mclose{margin-left:auto;width:26px;height:26px;border-radius:6px;border:1px solid var(--border);background:var(--bg3);color:var(--t1);cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center}
+.mclose:hover{color:var(--t0)}
+.mb{padding:20px;display:flex;flex-direction:column;gap:12px}
+.fg{display:flex;flex-direction:column;gap:4px}
+.fl{font-size:10px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.5px}
+.fi{background:var(--bg3);border:1px solid var(--border);border-radius:7px;padding:9px 12px;font-size:13px;color:var(--t0);font-family:var(--sans);outline:none;width:100%;transition:border-color .15s}
+.fi:focus{border-color:var(--accent)}
+.mf{padding:0 20px 20px;display:flex;flex-direction:column;gap:8px}
+.mswitch{text-align:center;font-size:11px;color:var(--t2)}
+.mswitch a{color:var(--accent);cursor:pointer}
+.err{background:rgba(255,61,87,.1);border:1px solid rgba(255,61,87,.25);color:var(--red);padding:7px 11px;border-radius:6px;font-size:11px;display:none}
+.err.show{display:block}
+
+/* ── SUCCESS ── */
+.success-screen{display:none;flex-direction:column;align-items:center;justify-content:center;padding:80px 24px;text-align:center;position:relative;z-index:1;min-height:60vh}
+.success-screen.show{display:flex}
+.success-icon{font-size:64px;margin-bottom:20px;animation:pop .4s ease}
+@keyframes pop{0%{transform:scale(0)}80%{transform:scale(1.1)}100%{transform:scale(1)}}
+
+/* ── TOAST ── */
+.toast{position:fixed;bottom:20px;right:20px;background:var(--bg2);border:1px solid var(--border-hi);border-radius:10px;padding:11px 15px;font-size:12px;color:var(--t0);display:flex;align-items:center;gap:8px;z-index:300;transform:translateY(60px);opacity:0;transition:all .25s;max-width:320px}
+.toast.show{transform:translateY(0);opacity:1}
+
+/* ── LEGAL ── */
+.legal{max-width:600px;margin:0 auto 48px;padding:0 24px;background:var(--bg2);border:1px solid var(--border);border-radius:11px;padding:18px 22px;font-size:11px;color:var(--t2);line-height:1.75;position:relative;z-index:1}
+.legal strong{color:var(--t1)}
+
+footer{padding:36px 24px;text-align:center;border-top:1px solid var(--border);color:var(--t2);font-size:11px;line-height:1.9;position:relative;z-index:1}
+footer a{color:var(--accent);text-decoration:none}
+
+@media(max-width:500px){h1{font-size:26px}.hero{padding:100px 16px 54px}.price-num{font-size:48px}}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <a href="/" class="logo"><div class="logo-icon">⚡</div>Nex<span>Trade</span> AI</a>
+  <div class="spacer"></div>
+  <div id="nav-auth" style="display:flex;align-items:center;gap:6px">
+    <button class="nav-link" onclick="openAuth('login')">Connexion</button>
+    <button class="btn btn-primary" onclick="openAuth('register')">S'inscrire</button>
+  </div>
+  <div id="nav-user" style="display:none;align-items:center;gap:8px">
+    <div class="user-badge"><span id="user-name-nav">—</span><span id="sub-nav" style="display:none;color:var(--green);font-weight:600;font-size:11px">✅ Pro</span></div>
+    <a href="/" class="btn btn-primary">Dashboard →</a>
+    <button class="nav-link" onclick="logout()">Sortir</button>
+  </div>
+</nav>
+
+<!-- HERO -->
+<div id="main-content">
+<section class="hero">
+  <div class="hero-badge"><div class="pulse"></div>Propulsé par Claude AI · Bot <span style="color:var(--gold)">XAU/USD</span> inclus</div>
+  <h1>Tradez l'Or, le Crypto<br>et le Forex avec l'<span class="grad">IA</span></h1>
+  <p class="hero-sub">5 bots automatisés sur BTC, ETH, EUR/USD et <strong style="color:var(--gold)">XAU/USD (Or)</strong>. L'IA Claude analyse les marchés et conseille vos stratégies en temps réel.</p>
+  <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
+    <button class="btn btn-primary" style="padding:12px 24px;font-size:14px" onclick="scrollTo('pricing')">🥇 Démarrer — 19€/mois</button>
+    <a href="/" class="btn btn-ghost" style="padding:12px 24px;font-size:14px">Voir la démo →</a>
+  </div>
+  <div class="hero-stats">
+    <div><div class="hstat-val" style="color:var(--green)">+41%</div><div class="hstat-lbl">Rendement moyen / mois</div></div>
+    <div><div class="hstat-val" style="color:var(--gold)">5</div><div class="hstat-lbl">Bots inclus</div></div>
+    <div><div class="hstat-val" style="color:var(--ai)">Claude</div><div class="hstat-lbl">IA intégrée</div></div>
+    <div><div class="hstat-val">24/7</div><div class="hstat-lbl">Automatisé</div></div>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<div class="section">
+  <div class="section-label">Ce qui est inclus</div>
+  <div class="section-title">Tout en un seul abonnement</div>
+  <div class="section-sub">Une plateforme complète, sans surprise</div>
+  <div class="features-grid">
+    <div class="feat"><div class="feat-icon">🥇</div><div class="feat-title">Bot XAU/USD — Or</div><div class="feat-desc">Gold Sentinel trade l'or 24/7 avec RSI + MACD + filtre Dollar Index. Exclusion automatique des publications macro (NFP, CPI, FOMC).</div></div>
+    <div class="feat"><div class="feat-icon">🧠</div><div class="feat-title">IA Claude illimitée</div><div class="feat-desc">Analysez n'importe quel marché, obtenez des conseils de stratégie et des explications détaillées des décisions de vos bots.</div></div>
+    <div class="feat"><div class="feat-icon">🤖</div><div class="feat-title">5 bots simultanés</div><div class="feat-desc">BTC/USDT, ETH/USDT (crypto), EUR/USD, GBP/USD (forex) et XAU/USD (or). Stratégies RSI, MACD, Bollinger, Grid, DCA.</div></div>
+    <div class="feat"><div class="feat-icon">🔗</div><div class="feat-title">Vos clés API Exchange</div><div class="feat-desc">Connectez Binance, Bybit, OKX ou Kraken. Vous gardez le contrôle total de vos fonds — nous ne gérons rien à votre place.</div></div>
+    <div class="feat"><div class="feat-icon">📊</div><div class="feat-title">Dashboard temps réel</div><div class="feat-desc">PnL, win rate, journal des trades, signaux IA et ticker live BTC · ETH · EUR/USD · XAU/USD mis à jour toutes les 2 secondes.</div></div>
+    <div class="feat"><div class="feat-icon">🛡️</div><div class="feat-title">Gestion du risque</div><div class="feat-desc">Stop-loss, take-profit et drawdown max configurables par bot. Le Gold Sentinel n'a jamais dépassé −2.1% de drawdown.</div></div>
+  </div>
+</div>
+
+<!-- PRICING -->
+<div class="pricing-section" id="pricing">
+  <div class="section-label" style="text-align:center">Abonnement</div>
+  <div class="section-title" style="text-align:center;margin-bottom:6px">Un tarif, tout inclus</div>
+  <div class="section-sub" style="margin-bottom:32px">Sans engagement · Résiliable en 1 clic · Renouvelé automatiquement</div>
+
+  <div class="pricing-wrap">
+    <div class="price-card">
+      <!-- Header -->
+      <div class="price-top">
+        <div class="price-plan-tag">⚡ Plan Pro</div>
+        <div class="price-num"><sup>€</sup>19</div>
+        <div class="price-per">par mois · TTC</div>
+        <div class="price-tagline">✨ Résiliable à tout moment</div>
+      </div>
+
+      <!-- Features -->
+      <div class="price-feats">
+        <div class="pf"><div class="pf-ic ic-gold">🥇</div>Bot XAU/USD — Gold Sentinel</div>
+        <div class="pf"><div class="pf-ic ic-ai">🧠</div>IA Claude illimitée</div>
+        <div class="pf"><div class="pf-ic ic-g">✓</div>5 bots Crypto + Forex + Or</div>
+        <div class="pf"><div class="pf-ic ic-g">✓</div>Connexion API Binance · Bybit · OKX</div>
+        <div class="pf"><div class="pf-ic ic-g">✓</div>Dashboard temps réel + journal</div>
+        <div class="pf"><div class="pf-ic ic-g">✓</div>Mises à jour & support inclus</div>
+      </div>
+
+      <!-- PayPal CTA -->
+      <div class="price-cta">
+        <button class="paypal-btn" id="pp-btn" onclick="subscribePro()">
+          <!-- PayPal SVG logo -->
+          <svg height="22" viewBox="0 0 101 32" xmlns="http://www.w3.org/2000/svg">
+            <path fill="#fff" d="M12.237 2.779C10.988 1.353 8.73.96 6.862.96H1.4C1.035.96.725 1.225.667 1.587L.004 5.845c-.042.265.17.505.439.505H3.72l.815-5.183a.496.496 0 0 1 .488-.418h2.013c4.055 0 5.853 1.718 5.481 5.394-.274 2.69-1.871 4.108-4.648 4.108H5.94l-.815 5.183a.496.496 0 0 1-.489.418H1.374a.44.44 0 0 1-.44-.505l2.655-16.9A.496.496 0 0 1 4.077.96h4.548c.918 0 1.726.063 2.42.192 1.997.372 3.124 1.44 3.192 2.627z"/>
+            <path fill="#fff" d="M39.687 10.497h-2.707a.496.496 0 0 0-.488.418l-.125.792-.198-.287c-.612-.888-1.977-1.185-3.339-1.185-3.124 0-5.793 2.365-6.314 5.683-.27 1.655.113 3.236 1.051 4.338.861.999 2.091 1.415 3.557 1.415 2.517 0 3.912-1.618 3.912-1.618l-.126.786c-.042.265.17.505.44.505h2.438c.365 0 .675-.265.733-.627l1.463-9.278a.44.44 0 0 0-.439-.505zm-3.784 5.509c-.272 1.614-1.55 2.698-3.184 2.698-.82 0-1.476-.263-1.896-.761-.418-.495-.576-1.199-.444-1.983.256-1.6 1.553-2.716 3.163-2.716.802 0 1.455.266 1.883.768.43.506.601 1.214.478 1.994z"/>
+          </svg>
+          <span>S'abonner avec PayPal</span>
+        </button>
+
+        <!-- Payment methods -->
+        <div class="payment-methods">
+          <span class="pm-label">Accepté :</span>
+          <div class="pm-icons">
+            <div class="pm-card" style="background:#1A1F71;color:#fff">VISA</div>
+            <div class="pm-card" style="background:#fff;color:#EB001B;border-color:#ddd">MC</div>
+            <div class="pm-card" style="background:#007BC1;color:#fff">AMEX</div>
+            <div class="pm-card" style="background:#003087;color:#009CDE">PayPal</div>
+          </div>
+        </div>
+
+        <div class="security-note">
+          <span>🔒</span>
+          <span>Paiement sécurisé SSL · <span style="color:var(--green)">Abonnement automatique</span> · Résiliation instantanée depuis PayPal</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- LEGAL -->
+<div class="legal" style="max-width:480px;margin:0 auto 48px">
+  <strong>⚖️ Information légale</strong><br>
+  NexTrade AI est un <strong>logiciel SaaS</strong> — nous fournissons des outils, nous ne gérons pas vos fonds. Vous tradez avec vos propres clés API. Le trading comporte des risques de perte en capital. Ce service n'est pas un conseil en investissement au sens AMF.
+</div>
+
+<footer>
+  <strong style="color:var(--t1)">NexTrade AI</strong> · Propulsé par Claude<br>
+  <a href="/pricing">Tarifs</a> · <a href="#">CGU</a> · <a href="#">Mentions légales</a> · <a href="#">Contact</a><br>
+  © 2026 NexTrade AI — Tous droits réservés
+</footer>
+</div><!-- end main-content -->
+
+<!-- SUCCESS SCREEN -->
+<div class="success-screen" id="success-screen">
+  <div class="success-icon">🎉</div>
+  <h2 style="font-size:28px;font-weight:800;margin-bottom:12px">Abonnement activé !</h2>
+  <p style="color:var(--t1);margin-bottom:28px;font-size:15px">Bienvenue dans NexTrade AI Pro.<br>Vos bots et l'IA Claude sont prêts.</p>
+  <a href="/" class="btn btn-primary" style="padding:13px 28px;font-size:15px">Accéder au Dashboard →</a>
+</div>
+
+<!-- AUTH MODAL -->
+<div class="overlay" id="auth-modal">
+  <div class="modal">
+    <div class="mh">
+      <span id="m-icon">🔐</span>
+      <div class="mh-title" id="m-title">Connexion</div>
+      <button class="mclose" onclick="closeAuth()">✕</button>
+    </div>
+    <div class="mb">
+      <div class="err" id="auth-err"></div>
+      <div class="fg" id="name-fg" style="display:none">
+        <label class="fl">Prénom / Nom</label>
+        <input class="fi" type="text" id="a-name" placeholder="Jean Dupont">
+      </div>
+      <div class="fg">
+        <label class="fl">Email</label>
+        <input class="fi" type="email" id="a-email" placeholder="votre@email.com">
+      </div>
+      <div class="fg">
+        <label class="fl">Mot de passe</label>
+        <input class="fi" type="password" id="a-pass" placeholder="••••••••" onkeydown="if(event.key==='Enter')submitAuth()">
+      </div>
+    </div>
+    <div class="mf">
+      <button class="btn btn-primary" style="width:100%;justify-content:center;padding:10px" id="a-btn" onclick="submitAuth()">Se connecter</button>
+      <div class="mswitch" id="m-switch">Pas de compte ? <a onclick="toggleMode()">Créer un compte</a></div>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"><span id="toast-msg"></span></div>
+
+<script>
+const API = '';
+let mode = 'login';
+let token = localStorage.getItem('nt_token');
+let pendingPayment = false;
+
+// ── INIT ──
+(async () => {
+  if (token) await checkAuth();
+  // Handle PayPal return
+  const p = new URLSearchParams(location.search);
+  if (p.get('provider') === 'paypal' && token) {
+    await activatePayPal(p.get('subscription_id'));
+  }
+  if (p.get('session_id') && token) {
+    await verifyStripe(p.get('session_id'));
+  }
+})();
+
+async function checkAuth() {
+  try {
+    const r = await fetch(`${API}/api/auth/me`, { headers: { Authorization: `Bearer ${token}` } });
+    if (r.ok) {
+      const { user, subscription } = await r.json();
+      showUserNav(user, subscription);
+    } else { token = null; localStorage.removeItem('nt_token'); }
+  } catch(e) {}
+}
+
+function showUserNav(user, sub) {
+  document.getElementById('nav-auth').style.display = 'none';
+  const nu = document.getElementById('nav-user');
+  nu.style.display = 'flex';
+  document.getElementById('user-name-nav').textContent = user.name || user.email;
+  if (sub?.status === 'active') document.getElementById('sub-nav').style.display = 'inline';
+}
+
+function logout() { localStorage.removeItem('nt_token'); location.reload(); }
+
+// ── AUTH ──
+function openAuth(m) {
+  mode = m; updateAuthUI();
+  document.getElementById('auth-modal').classList.add('open');
+  setTimeout(() => document.getElementById('a-email').focus(), 150);
+}
+function closeAuth() { document.getElementById('auth-modal').classList.remove('open'); }
+function toggleMode() { mode = mode === 'login' ? 'register' : 'login'; updateAuthUI(); document.getElementById('auth-err').classList.remove('show'); }
+function updateAuthUI() {
+  const l = mode === 'login';
+  document.getElementById('m-title').textContent = l ? 'Connexion' : 'Créer un compte';
+  document.getElementById('m-icon').textContent = l ? '🔐' : '✨';
+  document.getElementById('a-btn').textContent = l ? 'Se connecter' : 'Créer mon compte';
+  document.getElementById('name-fg').style.display = l ? 'none' : 'block';
+  document.getElementById('m-switch').innerHTML = l ? 'Pas de compte ? <a onclick="toggleMode()">Créer un compte</a>' : 'Déjà un compte ? <a onclick="toggleMode()">Se connecter</a>';
+}
+document.getElementById('auth-modal').addEventListener('click', e => { if(e.target === e.currentTarget) closeAuth(); });
+
+async function submitAuth() {
+  const email = document.getElementById('a-email').value.trim();
+  const pass = document.getElementById('a-pass').value;
+  const name = document.getElementById('a-name').value.trim();
+  const errEl = document.getElementById('auth-err');
+  errEl.classList.remove('show');
+  if (!email || !pass) { errEl.textContent = 'Email et mot de passe requis'; errEl.classList.add('show'); return; }
+  const btn = document.getElementById('a-btn');
+  btn.textContent = '...'; btn.disabled = true;
+  try {
+    const r = await fetch(`${API}/api/auth/${mode}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: pass, name }) });
+    const d = await r.json();
+    if (!r.ok) { errEl.textContent = d.error || 'Erreur'; errEl.classList.add('show'); btn.textContent = mode === 'login' ? 'Se connecter' : 'Créer mon compte'; btn.disabled = false; return; }
+    token = d.token; localStorage.setItem('nt_token', token);
+    closeAuth(); showUserNav(d.user, d.subscription);
+    showToast(`✅ Bienvenue ${d.user.name || d.user.email} !`);
+    if (pendingPayment) { pendingPayment = false; setTimeout(handlePayPal, 400); }
+  } catch(e) { errEl.textContent = 'Erreur serveur'; errEl.classList.add('show'); }
+  btn.textContent = mode === 'login' ? 'Se connecter' : 'Créer mon compte'; btn.disabled = false;
+}
+
+// ── PAYPAL ──
+function subscribePro() {
+  if (!token) { pendingPayment = true; openAuth('register'); showToast('👆 Créez votre compte pour continuer'); return; }
+  handlePayPal();
+}
+
+async function handlePayPal() {
+  const btn = document.getElementById('pp-btn');
+  btn.disabled = true; btn.innerHTML = '<span style="font-size:15px">⏳</span><span>Redirection PayPal...</span>';
+  try {
+    const r = await fetch(`${API}/api/paypal/create-order`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` } });
+    const d = await r.json();
+    if (d.approveUrl) { window.location.href = d.approveUrl; return; }
+    // PayPal not configured — show helpful message
+    showToast('⚙️ PayPal non configuré — ajoutez PAYPAL_CLIENT_ID dans les variables Railway');
+  } catch(e) { showToast('⚠️ Erreur de connexion'); }
+  btn.disabled = false;
+  btn.innerHTML = `<svg height="22" viewBox="0 0 101 32" xmlns="http://www.w3.org/2000/svg"><path fill="#fff" d="M12.237 2.779C10.988 1.353 8.73.96 6.862.96H1.4C1.035.96.725 1.225.667 1.587L.004 5.845c-.042.265.17.505.439.505H3.72l.815-5.183a.496.496 0 0 1 .488-.418h2.013c4.055 0 5.853 1.718 5.481 5.394-.274 2.69-1.871 4.108-4.648 4.108H5.94l-.815 5.183a.496.496 0 0 1-.489.418H1.374a.44.44 0 0 1-.44-.505l2.655-16.9A.496.496 0 0 1 4.077.96h4.548c.918 0 1.726.063 2.42.192 1.997.372 3.124 1.44 3.192 2.627z"/></svg><span>S'abonner avec PayPal</span>`;
+}
+
+async function activatePayPal(subId) {
+  await fetch(`${API}/api/paypal/activate`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify({ subscriptionId: subId }) });
+  document.getElementById('main-content').style.display = 'none';
+  document.getElementById('success-screen').classList.add('show');
+}
+
+async function verifyStripe(sessionId) {
+  const r = await fetch(`${API}/api/stripe/verify-session?session_id=${sessionId}`, { headers: { Authorization: `Bearer ${token}` } });
+  const d = await r.json();
+  if (d.success) { document.getElementById('main-content').style.display = 'none'; document.getElementById('success-screen').classList.add('show'); }
+}
+
+// ── UTILS ──
+function scrollTo(id) { document.getElementById(id).scrollIntoView({ behavior: 'smooth' }); }
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  document.getElementById('toast-msg').textContent = msg;
+  t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 4000);
+}
+</script>
+</body>
+</html>
