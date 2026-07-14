@@ -175,7 +175,7 @@ app.post('/api/paypal/activate', requireAuth, async (req, res) => {
 });
 
 // ── CLAUDE API PROXY ──
-app.post('/api/chat', requireAuth, requireSubscription, async (req, res) => {
+app.post('/api/chat', async (req, res) => {
   const { messages } = req.body;
   if (!messages) return res.status(400).json({ error: 'Messages requis' });
   try {
@@ -184,7 +184,7 @@ app.post('/api/chat', requireAuth, requireSubscription, async (req, res) => {
       headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
       body: JSON.stringify({
         model: 'claude-sonnet-4-6', max_tokens: 1000,
-        system: `Tu es un expert en trading algorithmique sur NexTrade AI. Tu analyses crypto (BTC, ETH), Forex (EUR/USD, GBP/USD) et Or (XAU/USD). L'utilisateur est ${req.user.name || req.user.email}. Réponds en français, de façon concise et experte.`,
+        system: `Tu es un expert en trading algorithmique sur NexTrade AI. Tu analyses crypto (BTC, ETH), Forex (EUR/USD, GBP/USD) et Or (XAU/USD). Le moteur de trading Bybit exécute 5 bots: Gold Sentinel (XAU/USD), Alpha RSI (BTC), Grid ETH, Bollinger FX (EUR/USD), Momentum GBP. Réponds en français, de façon concise et experte.`,
         messages
       })
     });
@@ -207,9 +207,28 @@ app.get('/api/market', (req, res) => {
 // ── HEALTH ──
 app.get('/health', (req, res) => res.json({ status: 'ok', users: users.size, subscriptions: subscriptions.size }));
 
-app.listen(PORT, () => {
+// ── TRADING ENGINE STATUS ──
+app.get('/api/trading/status', requireAuth, (req, res) => {
+  try {
+    const { positions, BOTS } = require('./trading-engine');
+    const status = BOTS.map(b => ({
+      ...b,
+      position: positions.get(b.id) || null,
+    }));
+    res.json({ active: true, bots: status });
+  } catch(e) {
+    res.json({ active: false, message: 'Moteur non démarré' });
+  }
+});
+
+app.listen(PORT, async () => {
   console.log(`\n🚀 NexTrade AI → http://localhost:${PORT}`);
   console.log(`💳 Stripe: ${process.env.STRIPE_SECRET_KEY ? '✅' : '❌ manquant'}`);
   console.log(`🅿️  PayPal: ${process.env.PAYPAL_CLIENT_ID ? '✅' : '❌ manquant'}`);
   console.log(`🧠 Claude: ${process.env.ANTHROPIC_API_KEY ? '✅' : '❌ manquant'}`);
+  console.log(`📈 Bybit:  ${process.env.BYBIT_API_KEY ? '✅' : '❌ manquant'}`);
+  if (process.env.BYBIT_API_KEY && process.env.BYBIT_SECRET) {
+    const { startTradingEngine } = require('./trading-engine');
+    startTradingEngine().catch(e => console.error('❌ Trading engine:', e.message));
+  }
 });
