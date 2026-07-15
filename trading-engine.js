@@ -13,7 +13,7 @@ const API_SECRET = process.env.BYBIT_SECRET;
 // SPOT uniquement : achat bas → vente haute (pas de short, pas de levier)
 // Capital adapté à ~22 USDT au total
 const BOTS = [
-  { id:'gold', name:'Gold Sentinel', symbol:'PAXGUSDT', capital:7, rsi_buy:38, rsi_sell:65, tp:0.025, sl:0.02, active:true, interval:'15', qtyDec:5 },
+  { id:'gold', name:'Gold Sentinel', symbol:'XAUTUSDT', capital:7, rsi_buy:38, rsi_sell:65, tp:0.025, sl:0.02, active:true, interval:'15', qtyDec:5 },
   { id:'btc',  name:'Alpha RSI',     symbol:'BTCUSDT',  capital:7, rsi_buy:35, rsi_sell:68, tp:0.030, sl:0.02, active:true, interval:'15', qtyDec:6 },
   { id:'eth',  name:'Grid ETH',      symbol:'ETHUSDT',  capital:7, rsi_buy:40, rsi_sell:62, tp:0.025, sl:0.02, active:true, interval:'15', qtyDec:5 },
 ];
