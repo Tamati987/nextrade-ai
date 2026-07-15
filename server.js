@@ -254,12 +254,25 @@ app.get('/api/real/summary', async (req, res) => {
           pnl = +((price - pos.price) * pos.qty).toFixed(2);
         } catch(e) {}
       }
-      bots.push({ id: b.id, name: b.name, symbol: b.symbol, capital: b.capital, active: b.active, position: pos, pnl });
+      bots.push({ id: b.id, name: b.name, symbol: b.symbol, capital: b.capital, active: b.active, position: pos, pnl, rsi_buy: b.rsi_buy, rsi_sell: b.rsi_sell, tp: b.tp, sl: b.sl });
     }
     res.json({ ok: true, balance: +balance.toFixed(2), bots, updatedAt: new Date().toISOString() });
   } catch(e) {
     res.json({ ok: false, error: e.message });
   }
+});
+
+// ── CHANDELIERS (proxy Bybit public — pour les graphiques) ──
+app.get('/api/real/candles', async (req, res) => {
+  try {
+    const { api } = require('./trading-engine');
+    const symbol = String(req.query.symbol || 'BTCUSDT').replace(/[^A-Z0-9]/g, '');
+    const interval = String(req.query.interval || '15').replace(/[^0-9DWM]/g, '') || '15';
+    const d = await api('GET', '/v5/market/kline', { category: 'spot', symbol, interval, limit: 96 });
+    if (d.retCode !== 0) throw new Error(d.retMsg);
+    const candles = d.result.list.map(c => ({ t: +c[0], o: +c[1], h: +c[2], l: +c[3], c: +c[4] })).reverse();
+    res.json({ ok: true, symbol, candles });
+  } catch(e) { res.json({ ok: false, error: e.message, candles: [] }); }
 });
 
 // ── DERNIÈRES DÉCISIONS IA ──
