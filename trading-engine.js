@@ -155,4 +155,4 @@ async function startTradingEngine() {
   setInterval(cycle, 15 * 60 * 1000);
 }
 
-module.exports = { startTradingEngine, BOTS, positions };
+module.exports = { startTradingEngine, BOTS, positions, api, getBalance, getPrice };
