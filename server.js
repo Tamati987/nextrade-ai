@@ -179,12 +179,44 @@ app.post('/api/chat', async (req, res) => {
   const { messages } = req.body;
   if (!messages) return res.status(400).json({ error: 'Messages requis' });
   try {
+    // Récupérer les VRAIES données du compte pour éviter les hallucinations
+    let realContext = 'Données réelles indisponibles pour le moment.';
+    try {
+      const { getBalance, getPrice, positions, BOTS } = require('./trading-engine');
+      const balance = await getBalance();
+      const lines = [];
+      for (const b of BOTS) {
+        const pos = positions.get(b.id);
+        if (pos) {
+          let pnl = 0;
+          try { const p = await getPrice(b.symbol); pnl = +((p - pos.price) * pos.qty).toFixed(2); } catch(e) {}
+          lines.push(`- ${b.name} (${b.symbol}, spot, capital $${b.capital}): POSITION OUVERTE achetée @ $${pos.price}, PnL actuel: ${pnl>=0?'+':''}$${pnl}`);
+        } else {
+          lines.push(`- ${b.name} (${b.symbol}, spot, capital $${b.capital}): AUCUNE position, en attente d'un signal d'achat (RSI < ${b.rsi_buy})`);
+        }
+      }
+      realContext = `Solde réel Bybit: $${balance.toFixed(2)} USDT (compte Trading unifié).
+Bots réels (3 uniquement, spot Bybit, sans levier):
+${lines.join('\n')}`;
+    } catch(e) {}
+
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
       body: JSON.stringify({
         model: 'claude-sonnet-4-6', max_tokens: 1000,
-        system: `Tu es un expert en trading algorithmique sur NexTrade AI. Tu analyses crypto (BTC, ETH), Forex (EUR/USD, GBP/USD) et Or (XAU/USD). Le moteur de trading Bybit exécute 5 bots: Gold Sentinel (XAU/USD), Alpha RSI (BTC), Grid ETH, Bollinger FX (EUR/USD), Momentum GBP. Réponds en français, de façon concise et experte.`,
+        system: `Tu es l'assistant trading de NexTrade AI, connecté au VRAI compte Bybit de l'utilisateur.
+
+=== DONNÉES RÉELLES DU COMPTE (source de vérité, à l'instant présent) ===
+${realContext}
+=== FIN DES DONNÉES RÉELLES ===
+
+RÈGLES STRICTES:
+- Utilise UNIQUEMENT les données réelles ci-dessus pour parler du compte, des soldes, PnL et positions. N'invente JAMAIS de chiffres.
+- Si une info n'est pas dans les données réelles (historique de performance, stats passées...), dis honnêtement que tu ne l'as pas.
+- Les bots tradent en SPOT (achat bas / vente haute), TP +2.5-3%, SL -2%, cycle 15 min. Pas de levier, pas de short.
+- Le capital est petit ($22): sois réaliste sur les gains attendus (quelques centimes à quelques dizaines de centimes par trade).
+- Réponds en français, concis, expert et honnête. Rappelle les risques quand pertinent.`,
         messages
       })
     });
@@ -227,6 +259,20 @@ app.get('/api/real/summary', async (req, res) => {
     res.json({ ok: true, balance: +balance.toFixed(2), bots, updatedAt: new Date().toISOString() });
   } catch(e) {
     res.json({ ok: false, error: e.message });
+  }
+});
+
+// ── ACTIVER/DÉSACTIVER UN BOT ──
+app.post('/api/real/bots/:id/toggle', (req, res) => {
+  try {
+    const { BOTS } = require('./trading-engine');
+    const bot = BOTS.find(b => b.id === req.params.id);
+    if (!bot) return res.status(404).json({ ok: false, error: 'Bot introuvable' });
+    bot.active = !bot.active;
+    console.log(`⚙️ Bot ${bot.name} → ${bot.active ? 'ACTIVÉ' : 'DÉSACTIVÉ'}`);
+    res.json({ ok: true, id: bot.id, active: bot.active });
+  } catch(e) {
+    res.status(500).json({ ok: false, error: e.message });
   }
 });
 
