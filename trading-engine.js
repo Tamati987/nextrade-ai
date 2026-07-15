@@ -13,12 +13,14 @@ const API_SECRET = process.env.BYBIT_SECRET;
 // SPOT uniquement : achat bas → vente haute (pas de short, pas de levier)
 // Capital adapté à ~22 USDT au total
 const BOTS = [
-  { id:'gold', name:'Gold Sentinel', symbol:'XAUTUSDT', capital:7, rsi_buy:38, rsi_sell:65, tp:0.025, sl:0.02, active:true, interval:'15', qtyDec:5 },
+  { id:'gold', name:'Gold Sentinel', symbol:'PAXGUSDT', capital:7, rsi_buy:38, rsi_sell:65, tp:0.025, sl:0.02, active:true, interval:'15', qtyDec:5 },
   { id:'btc',  name:'Alpha RSI',     symbol:'BTCUSDT',  capital:7, rsi_buy:35, rsi_sell:68, tp:0.030, sl:0.02, active:true, interval:'15', qtyDec:6 },
   { id:'eth',  name:'Grid ETH',      symbol:'ETHUSDT',  capital:7, rsi_buy:40, rsi_sell:62, tp:0.025, sl:0.02, active:true, interval:'15', qtyDec:5 },
 ];
 
 const positions = new Map();
+const lastVerdicts = new Map(); // dernières décisions IA par bot
+const aiState = { enabled: true }; // interrupteur validation Claude
 
 function sign(params, ts) {
   return crypto.createHmac('sha256', API_SECRET).update(ts + API_KEY + '5000' + params).digest('hex');
@@ -55,6 +57,38 @@ async function getBalance() {
   if (d.retCode !== 0) throw new Error(d.retMsg);
   const usdt = d.result.list[0]?.coin?.find(c => c.coin === 'USDT');
   return +(usdt?.walletBalance || 0);
+}
+
+// ── VALIDATION IA CLAUDE (appelée uniquement sur signal d'achat) ──
+async function askClaude(bot, ctx) {
+  if (!process.env.ANTHROPIC_API_KEY) return { decision: 'CONFIRM', reason: 'IA non configurée — règles seules' };
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 300,
+        system: `Tu es un validateur de trades pour un bot spot (Buy Low / Sell High, petit capital). Un signal d'ACHAT vient d'être détecté par les règles RSI. Ton rôle : le CONFIRMER ou le REJETER selon le contexte technique. Sois conservateur : en cas de doute, REJETTE. Tu ne peux PAS modifier les montants ni la stratégie. Réponds UNIQUEMENT en JSON strict: {"decision":"CONFIRM"|"REJECT","confidence":0-100,"reason":"explication courte en français"}`,
+        messages: [{ role: 'user', content: `Signal ACHAT détecté:
+- Marché: ${bot.symbol} (${bot.name})
+- Prix actuel: $${ctx.price}
+- RSI(14): ${ctx.rsi} (seuil achat: <${bot.rsi_buy})
+- EMA9: ${ctx.e9.toFixed(2)} | EMA21: ${ctx.e21.toFixed(2)} (tendance: ${ctx.e9 > ctx.e21 ? 'haussière' : 'baissière'})
+- Variation 24h approximative: ${ctx.chg24h}%
+- 5 dernières clôtures: ${ctx.lastCloses.join(', ')}
+- Capital du trade: $${bot.capital} | TP: +${bot.tp*100}% | SL: -${bot.sl*100}%
+Valide ou rejette cette entrée.` }]
+      })
+    });
+    const d = await res.json();
+    const text = d.content?.[0]?.text || '';
+    const json = JSON.parse(text.replace(/```json|```/g, '').trim());
+    return { decision: json.decision === 'REJECT' ? 'REJECT' : 'CONFIRM', confidence: json.confidence, reason: json.reason };
+  } catch(e) {
+    // En cas d'erreur IA : on suit les règles (l'IA est un filtre optionnel, jamais bloquant)
+    return { decision: 'CONFIRM', reason: 'IA indisponible — règles RSI appliquées (' + e.message.slice(0,50) + ')' };
+  }
 }
 
 function rsi(candles, p = 14) {
@@ -125,8 +159,28 @@ async function runBot(bot) {
     if (r < bot.rsi_buy && e9 > e21) {
       const bal = await getBalance();
       if (bal < bot.capital) { console.log(`⚠️ Solde insuffisant: $${bal.toFixed(2)}`); return; }
+
+      // ── VALIDATION PAR CLAUDE IA ──
+      const first = candles[0].c;
+      const chg24h = (((price - first) / first) * 100).toFixed(2);
+      const lastCloses = candles.slice(-5).map(c => c.c);
+      let verdict;
+      if (aiState.enabled) {
+        console.log(`🧠 Signal détecté — consultation de Claude IA...`);
+        verdict = await askClaude(bot, { price, rsi: r, e9, e21, chg24h, lastCloses });
+      } else {
+        console.log(`⏸ Validation IA en pause — règles RSI seules`);
+        verdict = { decision: 'CONFIRM', reason: 'Validation IA en pause — signal RSI appliqué directement' };
+      }
+      console.log(`🧠 Claude: ${verdict.decision}${verdict.confidence ? ' (' + verdict.confidence + '%)' : ''} — ${verdict.reason}`);
+      lastVerdicts.set(bot.id, { ...verdict, at: new Date().toISOString(), price, rsi: r });
+      if (verdict.decision === 'REJECT') {
+        console.log(`🛑 Entrée rejetée par l'IA — le bot attend un meilleur signal`);
+        return;
+      }
+
       const o = await buySpot(bot, price);
-      if (o) positions.set(bot.id, { ...o, openedAt: new Date() });
+      if (o) positions.set(bot.id, { ...o, openedAt: new Date(), aiReason: verdict.reason });
     } else {
       console.log(`⏳ Pas de signal d'achat (RSI=${r}, cible <${bot.rsi_buy})`);
     }
@@ -155,4 +209,4 @@ async function startTradingEngine() {
   setInterval(cycle, 15 * 60 * 1000);
 }
 
-module.exports = { startTradingEngine, BOTS, positions, api, getBalance, getPrice };
+module.exports = { startTradingEngine, BOTS, positions, api, getBalance, getPrice, lastVerdicts, aiState };
