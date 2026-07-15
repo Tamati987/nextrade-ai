@@ -207,17 +207,41 @@ app.get('/api/market', (req, res) => {
 // ── HEALTH ──
 app.get('/health', (req, res) => res.json({ status: 'ok', users: users.size, subscriptions: subscriptions.size }));
 
-// ── TRADING ENGINE STATUS ──
-app.get('/api/trading/status', requireAuth, (req, res) => {
+// ── DONNÉES RÉELLES BYBIT ──
+app.get('/api/real/summary', async (req, res) => {
   try {
-    const { positions, BOTS } = require('./trading-engine');
-    const status = BOTS.map(b => ({
-      ...b,
-      position: positions.get(b.id) || null,
-    }));
-    res.json({ active: true, bots: status });
+    const { getBalance, getPrice, positions, BOTS } = require('./trading-engine');
+    const balance = await getBalance();
+    const bots = [];
+    for (const b of BOTS) {
+      const pos = positions.get(b.id) || null;
+      let pnl = null;
+      if (pos) {
+        try {
+          const price = await getPrice(b.symbol);
+          pnl = +((price - pos.price) * pos.qty).toFixed(2);
+        } catch(e) {}
+      }
+      bots.push({ id: b.id, name: b.name, symbol: b.symbol, capital: b.capital, active: b.active, position: pos, pnl });
+    }
+    res.json({ ok: true, balance: +balance.toFixed(2), bots, updatedAt: new Date().toISOString() });
   } catch(e) {
-    res.json({ active: false, message: 'Moteur non démarré' });
+    res.json({ ok: false, error: e.message });
+  }
+});
+
+app.get('/api/real/orders', async (req, res) => {
+  try {
+    const { api } = require('./trading-engine');
+    const d = await api('GET', '/v5/order/history', { category: 'spot', limit: 20 });
+    if (d.retCode !== 0) throw new Error(d.retMsg);
+    const orders = (d.result.list || []).map(o => ({
+      symbol: o.symbol, side: o.side, qty: o.qty, price: o.avgPrice || o.price,
+      status: o.orderStatus, time: new Date(+o.createdTime).toLocaleString('fr-FR'),
+    }));
+    res.json({ ok: true, orders });
+  } catch(e) {
+    res.json({ ok: false, error: e.message, orders: [] });
   }
 });
 
