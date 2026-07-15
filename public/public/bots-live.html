@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NexTrade AI — Bots Live · Données Bybit</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+:root{
+  --bg:#06090F;--bg1:#0B1018;--bg2:#101820;--bg3:#16202E;
+  --border:#1A2840;--bhi:#243860;
+  --accent:#00D4FF;--green:#00E676;--red:#FF3D57;--amber:#FFB300;
+  --gold:#FFD700;--ai:#C084FC;--purple:#A78BFA;
+  --t0:#EDF4FF;--t1:#8FA8CC;--t2:#3E5878;
+  --mono:'JetBrains Mono',monospace;--sans:'Inter',sans-serif;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--t0);font-family:var(--sans);min-height:100vh}
+
+/* ── TOPBAR ── */
+.topbar{height:48px;background:var(--bg1);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 14px;gap:10px;position:sticky;top:0;z-index:10}
+.logo{display:flex;align-items:center;gap:7px;font-size:14px;font-weight:800;text-decoration:none;color:var(--t0)}
+.logo-orb{width:26px;height:26px;border-radius:7px;background:linear-gradient(135deg,var(--accent),var(--ai));display:flex;align-items:center;justify-content:center;font-size:13px}
+.logo em{color:var(--ai);font-style:normal}
+.live-badge{display:flex;align-items:center;gap:5px;padding:4px 10px;border-radius:6px;background:rgba(0,230,118,.1);border:1px solid rgba(0,230,118,.25);font-size:10px;font-weight:700;color:var(--green)}
+.dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:blink 1.4s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
+.spacer{flex:1}
+.btn{padding:6px 13px;border-radius:7px;font-size:11px;font-weight:600;cursor:pointer;border:none;font-family:var(--sans);display:inline-flex;align-items:center;gap:5px;text-decoration:none;transition:all .15s}
+.btn-ghost{background:var(--bg2);border:1px solid var(--border);color:var(--t1)}
+.btn-ghost:hover{border-color:var(--bhi);color:var(--t0)}
+.tf-pill{padding:4px 9px;border-radius:5px;font-size:10px;font-weight:600;cursor:pointer;border:1px solid transparent;color:var(--t2);background:none;font-family:var(--sans)}
+.tf-pill.active{background:rgba(0,212,255,.1);border-color:rgba(0,212,255,.2);color:var(--accent)}
+
+/* ── GRID ── */
+.grid{display:flex;flex-direction:column;gap:14px;padding:14px;max-width:1400px;margin:0 auto}
+
+/* ── BOT PANEL ── */
+.panel{background:var(--bg1);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.panel.gold{border-color:rgba(255,215,0,.25)}
+.panel-head{padding:11px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.p-icon{width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:15px}
+.p-name{font-size:13px;font-weight:700}
+.p-sym{font-size:10px;color:var(--t2);font-family:var(--mono)}
+.p-price{font-size:16px;font-weight:700;font-family:var(--mono);margin-left:6px}
+.p-chg{font-size:11px;font-weight:600;font-family:var(--mono)}
+.p-chg.up{color:var(--green)}.p-chg.dn{color:var(--red)}
+.p-stats{display:flex;gap:14px;margin-left:auto;flex-wrap:wrap;align-items:center}
+.p-stat{text-align:right}
+.p-stat-l{font-size:8px;color:var(--t2);text-transform:uppercase;letter-spacing:.6px}
+.p-stat-v{font-size:11px;font-weight:700;font-family:var(--mono)}
+.tag{display:inline-flex;padding:3px 8px;border-radius:5px;font-size:9px;font-weight:700}
+.tag-run{background:rgba(0,230,118,.1);color:var(--green);border:1px solid rgba(0,230,118,.25)}
+.tag-wait{background:var(--bg3);color:var(--t1);border:1px solid var(--border)}
+.chart-wrap{position:relative}
+canvas{display:block;width:100%}
+.legend{position:absolute;top:8px;left:12px;display:flex;gap:12px;font-size:9px;font-family:var(--mono);color:var(--t2);background:rgba(6,9,15,.7);padding:4px 8px;border-radius:5px;pointer-events:none}
+.legend b{font-weight:600}
+.err{padding:30px;text-align:center;color:var(--t2);font-size:11px}
+.loading{padding:40px;text-align:center;color:var(--t2);font-size:11px}
+@media(max-width:700px){.p-stats{width:100%;margin-left:0;justify-content:space-between}}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <a href="/" class="logo"><div class="logo-orb">⚡</div>Nex<em>Trade</em> AI</a>
+  <div class="live-badge"><div class="dot"></div>Bots Live · Données Bybit</div>
+  <div class="spacer"></div>
+  <div style="display:flex;gap:2px">
+    <button class="tf-pill" onclick="setTF('5',this)">5m</button>
+    <button class="tf-pill active" onclick="setTF('15',this)">15m</button>
+    <button class="tf-pill" onclick="setTF('60',this)">1h</button>
+    <button class="tf-pill" onclick="setTF('240',this)">4h</button>
+  </div>
+  <button class="btn btn-ghost" onclick="loadAll()">↺ Actualiser</button>
+  <span style="font-size:9px;color:var(--t2);font-family:var(--mono)" id="last-upd">—</span>
+  <a href="/" class="btn btn-ghost">← Dashboard</a>
+</div>
+
+<div class="grid" id="grid">
+  <div class="loading">Connexion au moteur de trading Bybit...</div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════
+//  NEXTRADE AI — MONITEUR LIVE DES BOTS
+//  Bougies Bybit réelles + RSI + lignes de position
+// ═══════════════════════════════════════════════
+let interval = '15';
+let bots = [];
+let refreshTimer = null;
+
+const ICONS = { gold:'🥇', btc:'₿', eth:'Ξ' };
+const COLORS = { gold:'#FFD700', btc:'#00D4FF', eth:'#A78BFA' };
+
+function setTF(tf, btn) {
+  interval = tf;
+  document.querySelectorAll('.tf-pill').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  loadAll();
+}
+
+async function loadAll() {
+  try {
+    const sum = await fetch('/api/real/summary').then(r=>r.json());
+    if (!sum.ok) {
+      document.getElementById('grid').innerHTML = '<div class="err">⚠️ Moteur non connecté: '+(sum.error||'')+'</div>';
+      return;
+    }
+    bots = sum.bots;
+    buildPanels();
+    for (const b of bots) {
+      await loadBotChart(b);
+      await new Promise(r=>setTimeout(r,300));
+    }
+    document.getElementById('last-upd').textContent = 'MAJ ' + new Date().toLocaleTimeString('fr-FR');
+  } catch(e) {
+    document.getElementById('grid').innerHTML = '<div class="err">⚠️ Serveur injoignable</div>';
+  }
+}
+
+function buildPanels() {
+  const grid = document.getElementById('grid');
+  grid.innerHTML = bots.map(b => `
+    <div class="panel ${b.id==='gold'?'gold':''}" id="panel-${b.id}">
+      <div class="panel-head">
+        <div class="p-icon" style="background:${COLORS[b.id]}22;border:1px solid ${COLORS[b.id]}44">${ICONS[b.id]||'🤖'}</div>
+        <div><div class="p-name">${b.name}</div><div class="p-sym">${b.symbol} · Spot Bybit · Capital $${b.capital}</div></div>
+        <span class="p-price" id="price-${b.id}" style="color:${COLORS[b.id]}">…</span>
+        <span class="p-chg" id="chg-${b.id}"></span>
+        <div class="p-stats">
+          <div class="p-stat"><div class="p-stat-l">RSI(14)</div><div class="p-stat-v" id="rsi-${b.id}">—</div></div>
+          <div class="p-stat"><div class="p-stat-l">Seuil achat</div><div class="p-stat-v" style="color:var(--green)">&lt;${b.rsi_buy}</div></div>
+          <div class="p-stat"><div class="p-stat-l">Seuil vente</div><div class="p-stat-v" style="color:var(--red)">&gt;${b.rsi_sell}</div></div>
+          <span class="tag ${b.position?'tag-run':'tag-wait'}" id="st-${b.id}">${b.position ? 'Position @ $'+b.position.price : (b.active ? '⏳ Attente signal' : '⏸ En pause')}</span>
+        </div>
+      </div>
+      <div class="chart-wrap">
+        <div class="legend"><span style="color:${COLORS[b.id]}"><b>—</b> Prix</span><span style="color:#00D4FF"><b>—</b> EMA9</span><span style="color:#A78BFA"><b>—</b> EMA21</span>${b.position?'<span style="color:#00E676"><b>––</b> Entrée/TP</span><span style="color:#FF3D57"><b>––</b> SL</span>':''}</div>
+        <canvas id="chart-${b.id}" height="300"></canvas>
+      </div>
+    </div>`).join('');
+}
+
+async function loadBotChart(bot) {
+  try {
+    const d = await fetch('/api/real/candles?symbol='+bot.symbol+'&interval='+interval).then(r=>r.json());
+    const canvas = document.getElementById('chart-'+bot.id);
+    if (!canvas) return;
+    if (!d.ok || !d.candles.length) {
+      canvas.parentElement.innerHTML = '<div class="err">⚠️ Données indisponibles: '+(d.error||'')+'</div>';
+      return;
+    }
+    const candles = d.candles;
+    const last = candles[candles.length-1];
+    const first = candles[0];
+    const priceEl = document.getElementById('price-'+bot.id);
+    if (priceEl) priceEl.textContent = '$'+fmtP(last.c);
+    const chg = ((last.c-first.o)/first.o*100);
+    const chgEl = document.getElementById('chg-'+bot.id);
+    if (chgEl) { chgEl.textContent = (chg>=0?'+':'')+chg.toFixed(2)+'%'; chgEl.className = 'p-chg '+(chg>=0?'up':'dn'); }
+    const rsiArr = rsiSeries(candles);
+    const curRsi = rsiArr[rsiArr.length-1];
+    const rsiEl = document.getElementById('rsi-'+bot.id);
+    if (rsiEl) {
+      rsiEl.textContent = curRsi.toFixed(1);
+      rsiEl.style.color = curRsi < bot.rsi_buy ? 'var(--green)' : curRsi > bot.rsi_sell ? 'var(--red)' : 'var(--t0)';
+    }
+    drawBotChart(canvas, candles, rsiArr, bot);
+  } catch(e) {}
+}
+
+function fmtP(v) { return v >= 100 ? v.toLocaleString('fr-FR',{maximumFractionDigits:1}) : v.toFixed(4); }
+
+function emaSeries(candles, p) {
+  const k = 2/(p+1); const out = []; let e = candles[0].c;
+  for (const c of candles) { e = c.c*k + e*(1-k); out.push(e); }
+  return out;
+}
+
+function rsiSeries(candles, p = 14) {
+  const out = [];
+  for (let i = 0; i < candles.length; i++) {
+    if (i < p) { out.push(50); continue; }
+    let g=0,l=0;
+    for (let j=i-p+1; j<=i; j++) { const d=candles[j].c-candles[j-1].c; d>0?g+=d:l-=d; }
+    const al=l/p;
+    out.push(al===0?100:100-100/(1+(g/p)/al));
+  }
+  return out;
+}
+
+function drawBotChart(canvas, candles, rsiArr, bot) {
+  const W = canvas.parentElement.offsetWidth;
+  const H = 300;
+  canvas.width = W * devicePixelRatio; canvas.height = H * devicePixelRatio;
+  canvas.style.height = H+'px';
+  const ctx = canvas.getContext('2d');
+  ctx.scale(devicePixelRatio, devicePixelRatio);
+
+  // Zones : bougies (haut 65%) + RSI (bas 30%)
+  const PAD = { top:14, right:64, bottom:4, left:8 };
+  const priceH = H * 0.62;
+  const rsiTop = priceH + 22;
+  const rsiH = H - rsiTop - 18;
+  const cW = W - PAD.left - PAD.right;
+
+  // Échelle prix (inclure entrée/TP/SL si position)
+  let hi = Math.max(...candles.map(c=>c.h));
+  let lo = Math.min(...candles.map(c=>c.l));
+  if (bot.position) {
+    const entry = +bot.position.price;
+    hi = Math.max(hi, entry*(1+bot.tp)*1.001);
+    lo = Math.min(lo, entry*(1-bot.sl)*0.999);
+  }
+  const range = (hi-lo)||1;
+  const yP = v => PAD.top + (1-(v-lo)/range) * (priceH-PAD.top);
+  const xI = i => PAD.left + (i+.5) * cW/candles.length;
+
+  // Grille + labels prix
+  ctx.font = '8px JetBrains Mono'; ctx.textAlign='left';
+  for (let g=0; g<=4; g++) {
+    const y = PAD.top + g*(priceH-PAD.top)/4;
+    ctx.strokeStyle='rgba(26,40,64,.5)'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(PAD.left,y); ctx.lineTo(W-PAD.right,y); ctx.stroke();
+    ctx.fillStyle='#3E5878';
+    ctx.fillText('$'+fmtP(hi - g*range/4), W-PAD.right+4, y+3);
+  }
+
+  // EMA
+  const e9 = emaSeries(candles,9), e21 = emaSeries(candles,21);
+  const line = (arr,color)=>{ ctx.beginPath(); arr.forEach((v,i)=>i===0?ctx.moveTo(xI(i),yP(v)):ctx.lineTo(xI(i),yP(v))); ctx.strokeStyle=color; ctx.lineWidth=1.3; ctx.stroke(); };
+  line(e21,'rgba(167,139,250,.55)');
+  line(e9,'rgba(0,212,255,.55)');
+
+  // Bougies
+  const bw = Math.max(1.5, cW/candles.length*0.65);
+  candles.forEach((c,i)=>{
+    const x=xI(i), bull=c.c>=c.o, col=bull?'#00E676':'#FF3D57';
+    ctx.strokeStyle=col; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(x,yP(c.h)); ctx.lineTo(x,yP(c.l)); ctx.stroke();
+    ctx.fillStyle=col; ctx.globalAlpha=.9;
+    ctx.fillRect(x-bw/2, Math.min(yP(c.o),yP(c.c)), bw, Math.abs(yP(c.c)-yP(c.o))||1);
+    ctx.globalAlpha=1;
+  });
+
+  // Lignes de position (entrée, TP, SL)
+  if (bot.position) {
+    const entry = +bot.position.price;
+    const drawHL = (v, color, label, dash) => {
+      const y = yP(v);
+      if (y < PAD.top-2 || y > priceH+2) return;
+      ctx.setLineDash(dash||[5,4]);
+      ctx.strokeStyle=color; ctx.lineWidth=1.2;
+      ctx.beginPath(); ctx.moveTo(PAD.left,y); ctx.lineTo(W-PAD.right,y); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle=color; ctx.font='bold 8px JetBrains Mono';
+      const tw = ctx.measureText(label).width;
+      ctx.fillRect(W-PAD.right-tw-10, y-8, tw+8, 13);
+      ctx.fillStyle='#06090F';
+      ctx.fillText(label, W-PAD.right-tw-6, y+2);
+    };
+    drawHL(entry, '#00D4FF', 'ENTRÉE $'+fmtP(entry), [2,2]);
+    drawHL(entry*(1+bot.tp), '#00E676', 'TP +'+(bot.tp*100).toFixed(1)+'%');
+    drawHL(entry*(1-bot.sl), '#FF3D57', 'SL -'+(bot.sl*100).toFixed(1)+'%');
+  }
+
+  // ── SOUS-GRAPHIQUE RSI ──
+  ctx.fillStyle='#3E5878'; ctx.font='bold 8px JetBrains Mono';
+  ctx.fillText('RSI(14)', PAD.left, rsiTop-6);
+  const yR = v => rsiTop + (1-v/100)*rsiH;
+  // fond
+  ctx.fillStyle='rgba(16,24,32,.5)';
+  ctx.fillRect(PAD.left, rsiTop, cW, rsiH);
+  // zones seuils
+  ctx.fillStyle='rgba(0,230,118,.07)';
+  ctx.fillRect(PAD.left, yR(bot.rsi_buy), cW, yR(0)-yR(bot.rsi_buy));
+  ctx.fillStyle='rgba(255,61,87,.07)';
+  ctx.fillRect(PAD.left, yR(100), cW, yR(bot.rsi_sell)-yR(100));
+  // lignes seuils
+  const rsiLine = (v,color,label)=>{
+    ctx.setLineDash([4,3]); ctx.strokeStyle=color; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(PAD.left,yR(v)); ctx.lineTo(W-PAD.right,yR(v)); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle=color; ctx.font='8px JetBrains Mono';
+    ctx.fillText(label, W-PAD.right+4, yR(v)+3);
+  };
+  rsiLine(bot.rsi_buy, '#00E676', 'Achat '+bot.rsi_buy);
+  rsiLine(bot.rsi_sell, '#FF3D57', 'Vente '+bot.rsi_sell);
+  rsiLine(50, 'rgba(62,88,120,.6)', '50');
+  // courbe RSI
+  ctx.beginPath();
+  rsiArr.forEach((v,i)=>i===0?ctx.moveTo(xI(i),yR(v)):ctx.lineTo(xI(i),yR(v)));
+  ctx.strokeStyle='#FFB300'; ctx.lineWidth=1.5; ctx.stroke();
+  // point actuel
+  const lastR = rsiArr[rsiArr.length-1];
+  ctx.beginPath(); ctx.arc(xI(rsiArr.length-1), yR(lastR), 3.5, 0, Math.PI*2);
+  ctx.fillStyle = lastR < bot.rsi_buy ? '#00E676' : lastR > bot.rsi_sell ? '#FF3D57' : '#FFB300';
+  ctx.fill();
+}
+
+// ── AUTO-REFRESH toutes les 60s ──
+loadAll();
+refreshTimer = setInterval(loadAll, 60000);
+window.addEventListener('resize', () => { for (const b of bots) loadBotChart(b); });
+</script>
+</body>
+</html>
