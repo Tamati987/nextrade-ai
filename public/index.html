@@ -512,17 +512,42 @@ function renderDashboard(c) {
 
 function renderBots(c) {
   c.innerHTML = `
-  <div class="stat-grid">
-    <div class="stat-card c-blue"><div class="s-lbl">Bots actifs</div><div class="s-val">3</div></div>
-    <div class="stat-card c-green"><div class="s-lbl">Capital déployé</div><div class="s-val">$6 000</div></div>
-    <div class="stat-card c-gold"><div class="s-lbl">Bot Or (XAU)</div><div class="s-val" style="color:var(--gold)">Actif 🥇</div></div>
-    <div class="stat-card c-ai"><div class="s-lbl">Signaux IA reçus</div><div class="s-val" style="color:var(--ai)">42</div></div>
-    <div class="stat-card c-purple"><div class="s-lbl">Total trades</div><div class="s-val">524</div></div>
+  <div class="stat-grid" style="grid-template-columns:repeat(3,1fr)">
+    <div class="stat-card c-blue"><div class="s-lbl">Bots actifs (réels)</div><div class="s-val" id="rb-count">…</div></div>
+    <div class="stat-card c-green"><div class="s-lbl">Solde Bybit</div><div class="s-val" id="rb-balance">…</div></div>
+    <div class="stat-card c-gold"><div class="s-lbl">Positions ouvertes</div><div class="s-val" id="rb-positions" style="color:var(--gold)">…</div></div>
   </div>
-  <div class="card">
-    <div class="card-header"><div><div class="card-title">Mes Bots</div></div><div class="ch-actions"><button class="btn btn-ai" onclick="openModal()">+ Nouveau Bot</button></div></div>
-    ${botsTable()}
+  <div class="card" style="border-color:rgba(0,230,118,.25)">
+    <div class="card-header">
+      <span style="font-size:14px">🟢</span>
+      <div><div class="card-title" style="color:var(--green)">Mes Bots — Trading Réel Bybit</div><div class="card-sub">Cycle d'analyse toutes les 15 minutes · Buy Low / Sell High</div></div>
+      <div class="ch-actions"><button class="btn btn-ghost" onclick="renderBots(document.getElementById('content'))">↺ Actualiser</button></div>
+    </div>
+    <div class="card-body" id="rb-list" style="display:flex;flex-direction:column;gap:8px">
+      <div style="color:var(--t2);font-size:11px;padding:10px">Chargement des bots réels...</div>
+    </div>
   </div>`;
+  fetch('/api/real/summary').then(r=>r.json()).then(d => {
+    if (!d.ok) {
+      document.getElementById('rb-list').innerHTML = '<div style="color:var(--red);font-size:11px;padding:10px">⚠️ Moteur non connecté: '+(d.error||'')+'</div>';
+      return;
+    }
+    document.getElementById('rb-count').textContent = d.bots.filter(b=>b.active).length;
+    document.getElementById('rb-balance').textContent = '$'+d.balance.toFixed(2);
+    document.getElementById('rb-positions').textContent = d.bots.filter(b=>b.position).length;
+    document.getElementById('rb-list').innerHTML = d.bots.map(b => `
+      <div class="bot-row ${b.id==='gold'?'gold-bot':''}" style="grid-template-columns:32px 1fr 110px 110px 130px">
+        <div class="b-av" style="background:${b.id==='gold'?'#FFD70022':b.id==='btc'?'#00D4FF22':'#A78BFA22'};border:1px solid ${b.id==='gold'?'#FFD70044':b.id==='btc'?'#00D4FF44':'#A78BFA44'}">${b.id==='gold'?'🥇':b.id==='btc'?'₿':'Ξ'}</div>
+        <div><div class="b-name">${b.name}</div><div class="b-desc">${b.symbol} · Spot Bybit</div></div>
+        <div><div class="b-cl">Capital</div><div class="b-cv">$${b.capital}</div></div>
+        <div><div class="b-cl">PnL position</div><div class="pnl ${(b.pnl||0)>=0?'up':'dn'}">${b.pnl!==null?((b.pnl>=0?'+':'')+'$'+b.pnl.toFixed(2)):'—'}</div></div>
+        <div>${b.position
+          ? '<span class="tag tag-run">Position @ $'+b.position.price+'</span>'
+          : '<span class="tag tag-pause">Attente signal achat</span>'}</div>
+      </div>`).join('');
+  }).catch(()=>{
+    document.getElementById('rb-list').innerHTML = '<div style="color:var(--red);font-size:11px;padding:10px">⚠️ Serveur injoignable</div>';
+  });
 }
 
 function botsTable() {
