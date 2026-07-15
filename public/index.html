@@ -457,6 +457,17 @@ function renderDashboard(c) {
     </div>
   </div>
 
+  <div class="card" style="border-color:var(--ai-glow)">
+    <div class="card-header">
+      <span style="font-size:14px">\u{1F9E0}</span>
+      <div><div class="card-title" style="color:var(--ai)">D\u00e9cisions IA \u2014 Interventions de Claude</div><div class="card-sub" id="ai-mode-sub">Chaque validation/rejet de signal, avec le raisonnement</div></div>
+      <div class="ch-actions"><button class="btn btn-ai" id="ai-toggle-btn" onclick="toggleAI()" style="padding:6px 12px;font-size:10px">\u2026</button></div>
+    </div>
+    <div class="card-body" id="ai-verdicts" style="display:flex;flex-direction:column;gap:8px">
+      <div style="color:var(--t2);font-size:11px">Chargement...</div>
+    </div>
+  </div>
+
   <div class="two-col">
     <div class="card">
       <div class="card-header"><div><div class="card-title">Performance 30 jours</div><div class="card-sub">Illustration (historique r\u00e9el disponible bient\u00f4t)</div></div></div>
@@ -931,6 +942,31 @@ async function toggleRealBot(id) {
   } catch(e) { showToast('⚠️ Erreur serveur'); }
 }
 
+// ── INTERRUPTEUR VALIDATION IA ──
+function updateAIButton(enabled) {
+  const btn = document.getElementById('ai-toggle-btn');
+  const sub = document.getElementById('ai-mode-sub');
+  if (btn) {
+    btn.textContent = enabled ? '\u23F8 Mettre l\u2019IA en pause' : '\u25B6 R\u00e9activer l\u2019IA';
+    btn.className = enabled ? 'btn btn-ghost' : 'btn btn-ai';
+    btn.style.padding = '6px 12px'; btn.style.fontSize = '10px';
+  }
+  if (sub) sub.innerHTML = enabled
+    ? '\u{1F7E2} <span style="color:var(--green)">IA active</span> \u2014 Claude valide chaque signal d\u2019achat avant ex\u00e9cution'
+    : '\u23F8 <span style="color:var(--amber)">IA en pause</span> \u2014 les bots suivent les r\u00e8gles RSI seules';
+}
+
+async function toggleAI() {
+  try {
+    const r = await fetch('/api/real/ai/toggle', { method: 'POST' });
+    const d = await r.json();
+    if (d.ok) {
+      updateAIButton(d.aiEnabled);
+      showToast(d.aiEnabled ? '\u{1F9E0} Validation Claude activ\u00e9e' : '\u23F8 Validation Claude en pause \u2014 r\u00e8gles RSI seules');
+    } else showToast('\u26A0\uFE0F ' + (d.error || 'Erreur'));
+  } catch(e) { showToast('\u26A0\uFE0F Serveur injoignable'); }
+}
+
 // ── DONNÉES RÉELLES BYBIT ──
 async function loadRealData() {
   try {
@@ -985,6 +1021,33 @@ async function loadRealData() {
     }
     setTxt('real-updated', 'Mis \u00e0 jour: ' + new Date().toLocaleTimeString('fr-FR') + ' \u00b7 Cycle bots toutes les 15 min');
     setTxt('real-orders-count', ordRes.ok ? String(ordRes.orders.length) : '\u2014');
+
+    // Décisions IA (lecture mémoire — gratuit)
+    try {
+      const vRes = await fetch('/api/real/verdicts').then(r=>r.json());
+      // État de l'interrupteur IA
+      if (vRes.ok && typeof vRes.aiEnabled !== 'undefined') updateAIButton(vRes.aiEnabled);
+      const vEl = document.getElementById('ai-verdicts');
+      if (vEl && vRes.ok) {
+        const withV = vRes.verdicts.filter(v=>v.verdict);
+        if (!withV.length) {
+          vEl.innerHTML = '<div style="padding:12px 0;text-align:center"><div style="font-size:20px;margin-bottom:6px">\u{1F634}</div><div style="font-size:11px;color:var(--t1);font-weight:600">Claude n\u2019est pas encore intervenu</div><div style="font-size:10px;color:var(--t2);margin-top:3px;line-height:1.6">Il sera consult\u00e9 automatiquement au prochain signal d\u2019achat d\u2019un bot (RSI bas).<br>Sa d\u00e9cision et son raisonnement s\u2019afficheront ici.</div></div>';
+        } else {
+          vEl.innerHTML = withV.map(v => {
+            const ok = v.verdict.decision === 'CONFIRM';
+            return '<div style="background:var(--bg-2);border:1px solid '+(ok?'rgba(0,230,118,.3)':'rgba(255,61,87,.3)')+';border-radius:8px;padding:10px 12px">'
+              + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">'
+              + '<span style="font-size:13px">\u{1F9E0}</span>'
+              + '<strong style="font-size:11px;color:var(--t0)">'+v.name+'</strong>'
+              + '<span class="tag '+(ok?'tag-run':'tag-pause')+'" style="'+(ok?'':'background:rgba(255,61,87,.1);color:var(--red);border-color:rgba(255,61,87,.25)')+'">'+(ok?'\u2705 CONFIRM\u00c9':'\u{1F6D1} REJET\u00c9')+(v.verdict.confidence?' \u00b7 '+v.verdict.confidence+'%':'')+'</span>'
+              + '<span style="margin-left:auto;font-size:9px;color:var(--t2);font-family:var(--mono)">'+(v.verdict.at ? new Date(v.verdict.at).toLocaleString('fr-FR') : '')+'</span></div>'
+              + '<div style="font-size:11px;color:var(--t1);line-height:1.6;font-style:italic">\u00ab '+v.verdict.reason+' \u00bb</div>'
+              + (v.verdict.price ? '<div style="font-size:9px;color:var(--t2);margin-top:4px;font-family:var(--mono)">Prix: $'+v.verdict.price+' \u00b7 RSI: '+v.verdict.rsi+'</div>' : '')
+              + '</div>';
+          }).join('');
+        }
+      }
+    } catch(e) {}
   } catch(e) {
     const body = document.getElementById('real-body');
     if (body) body.innerHTML = '<div style="color:var(--red);font-size:11px">\u26A0\uFE0F Erreur de connexion au serveur</div>';
