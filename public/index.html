@@ -574,51 +574,59 @@ function botsTable() {
 function renderGold(c) {
   c.innerHTML = `
   <div class="gold-card">
-    <div class="gold-header"><span style="font-size:20px">🥇</span><div class="gold-title">Gold Sentinel — Bot XAU/USD</div><div class="ai-model-tag" style="margin-left:auto;background:var(--gold-dim);border-color:var(--gold-glow);color:var(--gold)">CFD Or</div></div>
+    <div class="gold-header"><span style="font-size:20px">🥇</span><div class="gold-title">Gold Sentinel — Bot Or (XAUT/USDT)</div><div class="ai-model-tag" style="margin-left:auto;background:var(--gold-dim);border-color:var(--gold-glow);color:var(--gold)">Spot Bybit · LIVE</div></div>
     <div class="gold-body">
-      Le bot <strong>Gold Sentinel</strong> trade l'or spot (XAU/USD) en utilisant une stratégie triple : <strong>RSI(14)</strong> pour les entrées de retournement, <strong>MACD(12,26,9)</strong> pour confirmer la tendance, et un <strong>filtre DXY</strong> (Dollar Index) pour éviter les faux signaux — quand le dollar monte, le bot réduit son exposition longue sur l'or.<br><br>
-      <strong>Logique :</strong> L'or et le dollar sont inversement corrélés. Quand le DXY baisse (&lt; MA50), le signal haussier sur XAU est renforcé. Le bot intègre aussi une fenêtre d'exclusion autour des publications macro (NFP, CPI, FOMC).
+      Le bot <strong>Gold Sentinel</strong> trade l'or tokenisé (<strong>XAUT</strong> = Tether Gold, adossé à l'or physique) en <strong>spot sur Bybit</strong> : il achète quand le RSI(14) descend sous 38 avec une tendance qui repart (EMA9 > EMA21), puis revend automatiquement à <strong>+2.5%</strong> (Take Profit) ou coupe à <strong>-2%</strong> (Stop Loss).<br><br>
+      <strong>Buy Low / Sell High</strong> — pas de levier, pas de vente à découvert : le bot n'achète que lors des vraies baisses et attend patiemment sinon.
     </div>
   </div>
 
   <div class="stat-grid" style="grid-template-columns:repeat(4,1fr)">
-    <div class="stat-card c-gold"><div class="s-ico">💰</div><div class="s-lbl">PnL Total</div><div class="s-val" style="color:var(--gold)">+$344</div><div class="s-chg up">▲ +28.7% ROI</div></div>
-    <div class="stat-card c-green"><div class="s-ico">🎯</div><div class="s-lbl">Win Rate</div><div class="s-val">65%</div><div class="s-chg up">▲ 38/58 trades</div></div>
-    <div class="stat-card c-blue"><div class="s-ico">⚡</div><div class="s-lbl">Trades</div><div class="s-val">58</div><div class="s-chg up">▲ Actif depuis 14j</div></div>
-    <div class="stat-card c-purple"><div class="s-ico">🛡️</div><div class="s-lbl">Drawdown Max</div><div class="s-val" style="color:var(--red)">-2.1%</div><div class="s-chg up">▲ Bien contenu</div></div>
-  </div>
-
-  <div class="two-col">
-    <div class="card">
-      <div class="card-header"><div><div class="card-title">Performance XAU/USD</div><div class="card-sub">14 derniers jours</div></div></div>
-      <div class="card-body"><canvas id="goldChart" height="150"></canvas></div>
-    </div>
-    <div class="card">
-      <div class="card-header"><div class="card-title">Configuration Gold Sentinel</div></div>
-      <div class="card-body" style="display:flex;flex-direction:column;gap:9px;font-size:11px">
-        ${[['Marché','XAU/USD (Or CFD)'],['Stratégie','RSI(14) + MACD(12,26,9) + DXY'],['Timeframe','15 minutes'],['Capital alloué','$1 200 USDT'],['Levier','2x'],['Stop-Loss','1.8%'],['Take-Profit','3.5%'],['Filtre DXY','Actif (MA50)'],['Exclusion news','NFP, CPI, FOMC'],['Exchange','Binance (CFD)']].map(([k,v])=>`
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border)">
-          <span style="color:var(--t2);font-size:10px">${k}</span>
-          <span style="color:var(--t0);font-weight:600;font-family:var(--mono);font-size:10px">${v}</span>
-        </div>`).join('')}
-        <button class="btn btn-gold" style="margin-top:4px;width:100%" onclick="askQ('Donne-moi des suggestions pour optimiser le bot Gold Sentinel sur XAU/USD : paramètres RSI, MACD, gestion du DXY et gestion du risque.')">🧠 Optimiser avec IA</button>
-      </div>
-    </div>
+    <div class="stat-card c-gold"><div class="s-ico">💰</div><div class="s-lbl">Statut</div><div class="s-val" id="g-status" style="color:var(--gold);font-size:14px">…</div><div class="s-chg" id="g-status-sub" style="color:var(--t2)">—</div></div>
+    <div class="stat-card c-green"><div class="s-ico">📈</div><div class="s-lbl">PnL Position</div><div class="s-val" id="g-pnl">—</div><div class="s-chg" id="g-pnl-sub" style="color:var(--t2)">—</div></div>
+    <div class="stat-card c-blue"><div class="s-ico">💵</div><div class="s-lbl">Capital alloué</div><div class="s-val" id="g-capital">…</div><div class="s-chg" style="color:var(--t2)">USDT</div></div>
+    <div class="stat-card c-purple"><div class="s-ico">🛡️</div><div class="s-lbl">Protection</div><div class="s-val" style="font-size:14px">TP +2.5%</div><div class="s-chg" style="color:var(--red)">SL -2%</div></div>
   </div>
 
   <div class="card">
-    <div class="card-header"><div class="card-title">Trades récents — Gold Sentinel</div></div>
-    <div class="card-body" style="padding:0 13px">
-      ${[
-        {type:'sell',text:'<strong>Vente</strong> XAU/USD @ $2 374.20 · TP atteint · <span style="color:var(--green)">+$44.50</span>',time:'14:38'},
-        {type:'buy', text:'<strong>Achat</strong> XAU/USD @ $2 368.50 · RSI=31, DXY faible, MACD haussier',time:'13:50'},
-        {type:'sell',text:'<strong>Vente</strong> XAU/USD @ $2 361.00 · SL touché · <span style="color:var(--red)">-$21.60</span>',time:'10:12'},
-        {type:'buy', text:'<strong>Achat</strong> XAU/USD @ $2 352.80 · Signal triple confirmé',time:'09:30'},
-        {type:'sell',text:'<strong>Vente</strong> XAU/USD @ $2 369.40 · TP · <span style="color:var(--green)">+$83.20</span>',time:'Hier 15:40'},
-      ].map(l=>`<div class="log-item"><div class="log-dot ${l.type}"></div><div class="log-text">${l.text}</div><div class="log-time">${l.time}</div></div>`).join('')}
+    <div class="card-header"><div class="card-title">Configuration réelle — Gold Sentinel</div>
+    <div class="ch-actions"><button class="btn btn-ghost" onclick="renderGold(document.getElementById('content'))">↺ Actualiser</button></div></div>
+    <div class="card-body" style="display:flex;flex-direction:column;gap:9px;font-size:11px" id="g-config">
+      ${[['Marché','XAUT/USDT (Tether Gold — Spot)'],['Stratégie','RSI(14) + EMA9/EMA21'],['Signal achat','RSI < 38 + tendance haussière'],['Signal vente','RSI > 65 · TP +2.5% · SL -2%'],['Timeframe','15 minutes'],['Mode','Spot — sans levier'],['Exchange','Bybit (compte Trading unifié)']].map(([k,v])=>`
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border)">
+        <span style="color:var(--t2);font-size:10px">${k}</span>
+        <span style="color:var(--t0);font-weight:600;font-family:var(--mono);font-size:10px">${v}</span>
+      </div>`).join('')}
+      <button class="btn btn-gold" style="margin-top:4px;width:100%" onclick="askQ('Analyse la situation actuelle du bot Gold Sentinel sur XAUT/USDT (or tokenisé, spot Bybit) : que dit le RSI, faut-il ajuster les paramètres rsi_buy=38 / TP 2.5% / SL 2% ?')">🧠 Analyser avec Claude</button>
     </div>
   </div>`;
-  setTimeout(()=>drawGoldChart(), 60);
+
+  // Charger le statut réel du bot or
+  fetch('/api/real/summary').then(r=>r.json()).then(d => {
+    if (!d.ok) return;
+    const gold = d.bots.find(b=>b.id==='gold');
+    if (!gold) return;
+    const st = document.getElementById('g-status');
+    const stSub = document.getElementById('g-status-sub');
+    const pnl = document.getElementById('g-pnl');
+    const pnlSub = document.getElementById('g-pnl-sub');
+    const cap = document.getElementById('g-capital');
+    if (cap) cap.textContent = '$' + gold.capital;
+    if (gold.position) {
+      if (st) st.textContent = 'Position ouverte';
+      if (stSub) { stSub.textContent = 'Achat @ $' + gold.position.price; stSub.style.color = 'var(--green)'; }
+      if (pnl) {
+        pnl.textContent = ((gold.pnl||0)>=0?'+$':'-$') + Math.abs(gold.pnl||0).toFixed(2);
+        pnl.style.color = (gold.pnl||0)>=0 ? 'var(--green)' : 'var(--red)';
+      }
+      if (pnlSub) pnlSub.textContent = 'En cours';
+    } else {
+      if (st) st.textContent = 'En attente';
+      if (stSub) stSub.textContent = 'Attend RSI < 38 pour acheter';
+      if (pnl) pnl.textContent = '$0.00';
+      if (pnlSub) pnlSub.textContent = 'Aucune position ouverte';
+    }
+  }).catch(()=>{});
 }
 
 function renderActivity(c) {
