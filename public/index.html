@@ -439,76 +439,42 @@ function renderTab(t) {
 function renderDashboard(c) {
   c.innerHTML = `
   <div class="stat-grid" id="real-stats">
-    <div class="stat-card c-blue"><div class="s-ico">💰</div><div class="s-lbl">Solde Réel Bybit</div><div class="s-val" id="real-balance">…</div><div class="s-chg" id="real-balance-sub" style="color:var(--t2)">Connexion...</div></div>
-    <div class="stat-card c-green"><div class="s-ico">📈</div><div class="s-lbl">PnL Positions</div><div class="s-val" id="real-pnl">$0.00</div><div class="s-chg" id="real-pnl-sub" style="color:var(--t2)">Aucune position</div></div>
-    <div class="stat-card c-gold"><div class="s-ico">🥇</div><div class="s-lbl">Bot Or (PAXG)</div><div class="s-val" id="real-gold" style="color:var(--gold)">—</div><div class="s-chg" id="real-gold-sub" style="color:var(--t2)">En attente signal</div></div>
-    <div class="stat-card c-purple"><div class="s-ico">🤖</div><div class="s-lbl">Bots Actifs</div><div class="s-val" id="real-bots">…</div><div class="s-chg up">Moteur Bybit Live</div></div>
-    <div class="stat-card c-ai"><div class="s-ico">📋</div><div class="s-lbl">Ordres Réels</div><div class="s-val" id="real-orders-count" style="color:var(--ai)">…</div><div class="s-chg" style="color:var(--t2)">Historique Bybit</div></div>
+    <div class="stat-card c-blue"><div class="s-ico">\u{1F4B0}</div><div class="s-lbl">Solde R\u00e9el Bybit</div><div class="s-val" id="real-balance">\u2026</div><div class="s-chg" id="real-balance-sub" style="color:var(--t2)">Connexion...</div></div>
+    <div class="stat-card c-green"><div class="s-ico">\u{1F4C8}</div><div class="s-lbl">PnL Positions</div><div class="s-val" id="real-pnl">$0.00</div><div class="s-chg" id="real-pnl-sub" style="color:var(--t2)">Aucune position</div></div>
+    <div class="stat-card c-gold"><div class="s-ico">\u{1F947}</div><div class="s-lbl">Bot Or (XAUT)</div><div class="s-val" id="real-gold" style="color:var(--gold)">\u2014</div><div class="s-chg" id="real-gold-sub" style="color:var(--t2)">En attente</div></div>
+    <div class="stat-card c-purple"><div class="s-ico">\u{1F916}</div><div class="s-lbl">Bots Actifs</div><div class="s-val" id="real-bots">\u2026</div><div class="s-chg up">Moteur Bybit Live</div></div>
+    <div class="stat-card c-ai"><div class="s-ico">\u{1F4CB}</div><div class="s-lbl">Ordres R\u00e9els</div><div class="s-val" id="real-orders-count" style="color:var(--ai)">\u2026</div><div class="s-chg" style="color:var(--t2)">Historique Bybit</div></div>
   </div>
 
-  <!-- COMPTE RÉEL BYBIT -->
   <div class="card" style="border-color:rgba(0,230,118,.25)">
     <div class="card-header">
-      <span style="font-size:15px">🟢</span>
-      <div><div class="card-title" style="color:var(--green)">Compte Réel Bybit — Trading Live</div><div class="card-sub" id="real-updated">Chargement...</div></div>
-      <div class="ch-actions"><button class="btn btn-ghost" onclick="loadRealData()">↺ Actualiser</button></div>
+      <span style="font-size:14px">\u{1F7E2}</span>
+      <div><div class="card-title" style="color:var(--green)">Compte R\u00e9el Bybit \u2014 Trading Live</div><div class="card-sub" id="real-updated">Chargement...</div></div>
+      <div class="ch-actions"><button class="btn btn-ghost" onclick="loadRealData()">\u21BA Actualiser</button></div>
     </div>
-    <div class="card-body" id="real-body" style="font-size:11px;color:var(--t1)">Connexion au moteur de trading...</div>
-  </div>
-
-  <div class="analysis-card">
-    <div class="analysis-header"><span>🧠</span><div class="analysis-title">Analyse IA — Marché en temps réel</div><div class="ai-model-tag" style="margin-left:auto">Claude</div></div>
-    <div class="analysis-body">BTC maintient sa dynamique haussière (RSI 58). <strong>XAU/USD</strong> en forte progression : le Dollar Index (DXY) faiblit à 104.2, ce qui pousse l'or vers la résistance <strong>$2 380</strong>. Le bot Gold Sentinel a capturé +$44 ce matin sur TP partiel. <strong>EUR/USD</strong> consolide — attente du discours Fed. Recommandation : maintenir les 4 bots actifs, laisser Gold Sentinel en mode agressif.</div>
-    <div class="analysis-scores">
-      <div class="ascore"><div class="ascore-val" style="color:var(--green)">68</div><div class="ascore-lbl">BTC Signal</div></div>
-      <div class="ascore"><div class="ascore-val" style="color:var(--gold)">78</div><div class="ascore-lbl">Or Signal</div></div>
-      <div class="ascore"><div class="ascore-val" style="color:var(--amber)">44</div><div class="ascore-lbl">EUR Signal</div></div>
-      <div class="ascore"><div class="ascore-val" style="color:var(--green)">73</div><div class="ascore-lbl">Global</div></div>
+    <div class="card-body" id="real-body" style="display:flex;flex-direction:column;gap:8px">
+      <div style="color:var(--t2);font-size:11px">Connexion au moteur de trading...</div>
     </div>
   </div>
 
   <div class="two-col">
     <div class="card">
-      <div class="card-header"><div><div class="card-title">Performance 30 jours</div><div class="card-sub">Portefeuille total</div></div></div>
+      <div class="card-header"><div><div class="card-title">Performance 30 jours</div><div class="card-sub">Illustration (historique r\u00e9el disponible bient\u00f4t)</div></div></div>
       <div class="card-body"><canvas id="perfChart" height="150"></canvas></div>
     </div>
     <div class="card">
-      <div class="card-header"><div class="card-title">Activité récente</div></div>
-      <div class="card-body" style="padding:0 13px">
-        ${logs.slice(0,5).map(l=>`<div class="log-item"><div class="log-dot ${l.type}"></div><div class="log-text">${l.text}</div><div class="log-time">${l.time}</div></div>`).join('')}
+      <div class="card-header"><div class="card-title">Acc\u00e8s rapides</div></div>
+      <div class="card-body" style="display:flex;flex-direction:column;gap:8px">
+        <button class="btn btn-ghost" style="justify-content:flex-start" onclick="goTab('activity',null)">\u26A1 Activit\u00e9 \u2014 Ordres r\u00e9els Bybit</button>
+        <button class="btn btn-ghost" style="justify-content:flex-start" onclick="goTab('gold',null)">\u{1F947} Bot Or \u2014 Gold Sentinel</button>
+        <button class="btn btn-ghost" style="justify-content:flex-start;color:var(--green);border-color:rgba(0,230,118,.3)" onclick="window.open('/paper-trading.html','_blank')">\u{1F4C8} Paper Trading \u2014 Simulateur $10 000</button>
+        <button class="btn btn-ghost" style="justify-content:flex-start" onclick="goTab('settings',null)">\u2699\uFE0F Param\u00e8tres \u2014 Pause / activation des bots</button>
+        <button class="btn btn-ai" style="justify-content:flex-start" onclick="askQ('Fais un point complet sur mes 3 bots r\u00e9els (Gold Sentinel XAUT, Alpha RSI BTC, Grid ETH) : conditions de march\u00e9 actuelles et probabilit\u00e9 de signal d achat prochainement.')">\u{1F9E0} Demander un point \u00e0 Claude</button>
       </div>
     </div>
-  </div>
-
-  <!-- Paper Trading Card -->
-  <div class="card" style="background:linear-gradient(135deg,rgba(0,230,118,.05),rgba(0,212,255,.03));border-color:rgba(0,230,118,.2)">
-    <div class="card-header">
-      <span style="font-size:16px">📈</span>
-      <div><div class="card-title" style="color:var(--green)">Paper Trading — Données Live</div><div class="card-sub">Testez les stratégies des bots avec $10 000 virtuels · Prix Binance temps réel</div></div>
-      <div class="ch-actions">
-        <button class="btn btn-ghost" style="border-color:rgba(0,230,118,.3);color:var(--green)" onclick="window.open('/paper-trading.html','_blank')">📈 Ouvrir le simulateur →</button>
-      </div>
-    </div>
-    <div class="card-body" style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
-      ${[
-        {icon:'₿',label:'BTC/USDT',desc:'Bot Alpha RSI · RSI+EMA',color:'var(--accent)'},
-        {icon:'🥇',label:'XAU/USD',desc:'Gold Sentinel · RSI+MACD+DXY',color:'var(--gold)'},
-        {icon:'€',label:'EUR/USD',desc:'Bollinger FX · Bollinger+MACD',color:'var(--amber)'},
-      ].map(m=>`
-      <div style="background:var(--bg-3);border:1px solid var(--border);border-radius:8px;padding:10px;cursor:pointer;transition:border-color .15s" onclick="window.open('/paper-trading.html','_blank')" onmouseover="this.style.borderColor='rgba(0,230,118,.3)'" onmouseout="this.style.borderColor='var(--border)'">
-        <div style="font-size:18px;margin-bottom:5px">${m.icon}</div>
-        <div style="font-size:11px;font-weight:700;color:${m.color}">${m.label}</div>
-        <div style="font-size:9px;color:var(--t2);margin-top:2px">${m.desc}</div>
-        <div style="font-size:9px;color:var(--green);margin-top:5px;font-weight:600">▶ Trader en paper</div>
-      </div>`).join('')}
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="card-header"><div><div class="card-title">Tous les bots</div></div><div class="ch-actions"><button class="btn btn-ai" onclick="openModal()">+ Nouveau Bot</button></div></div>
-    ${botsTable()}
   </div>`;
   setTimeout(drawChart, 60);
+  setTimeout(loadRealData, 100);
 }
 
 function renderBots(c) {
@@ -968,66 +934,60 @@ async function toggleRealBot(id) {
 // ── DONNÉES RÉELLES BYBIT ──
 async function loadRealData() {
   try {
-    const [sumRes, ordRes] = await Promise.all([
-      fetch('/api/real/summary').then(r=>r.json()),
-      fetch('/api/real/orders').then(r=>r.json()),
-    ]);
-    if (sumRes.ok) {
-      const balEl = document.getElementById('real-balance');
-      if (balEl) balEl.textContent = '$' + sumRes.balance.toFixed(2);
-      const balSub = document.getElementById('real-balance-sub');
-      if (balSub) { balSub.textContent = 'USDT · Trading unifié'; balSub.style.color = 'var(--green)'; }
-      const botsEl = document.getElementById('real-bots');
-      if (botsEl) botsEl.textContent = sumRes.bots.filter(b=>b.active).length;
+    const sumRes = await fetch('/api/real/summary').then(r=>r.json());
+    let ordRes = { ok:false, orders:[] };
+    try { ordRes = await fetch('/api/real/orders').then(r=>r.json()); } catch(e) {}
 
-      // PnL total des positions ouvertes
-      const totalPnl = sumRes.bots.reduce((s,b)=>s+(b.pnl||0),0);
-      const openCount = sumRes.bots.filter(b=>b.position).length;
-      const pnlEl = document.getElementById('real-pnl');
-      const pnlSub = document.getElementById('real-pnl-sub');
-      if (pnlEl) {
-        pnlEl.textContent = (totalPnl>=0?'+$':'-$') + Math.abs(totalPnl).toFixed(2);
-        pnlEl.style.color = totalPnl>=0 ? 'var(--green)' : 'var(--red)';
-      }
-      if (pnlSub) pnlSub.textContent = openCount + ' position(s) ouverte(s)';
-
-      // Bot Or
-      const gold = sumRes.bots.find(b=>b.id==='gold');
-      const goldEl = document.getElementById('real-gold');
-      const goldSub = document.getElementById('real-gold-sub');
-      if (gold && goldEl) {
-        if (gold.position) {
-          goldEl.textContent = (gold.pnl>=0?'+$':'-$')+Math.abs(gold.pnl||0).toFixed(2);
-          if (goldSub) goldSub.textContent = 'Position @ $'+gold.position.price;
-        } else {
-          goldEl.textContent = 'Prêt';
-          if (goldSub) goldSub.textContent = 'En attente signal achat';
-        }
-      }
-
-      // Corps de la carte
+    if (!sumRes.ok) {
       const body = document.getElementById('real-body');
-      if (body) {
-        body.innerHTML = sumRes.bots.map(b => `
-          <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
-            <span style="font-size:14px">${b.id==='gold'?'🥇':b.id==='btc'?'₿':'Ξ'}</span>
-            <div style="flex:1"><strong style="color:var(--t0)">${b.name}</strong> · ${b.symbol} · Capital: $${b.capital}</div>
-            ${b.position
-              ? `<span class="tag tag-run">Position ouverte @ $${b.position.price}</span><span class="pnl ${(b.pnl||0)>=0?'up':'dn'}">${(b.pnl||0)>=0?'+':''}$${(b.pnl||0).toFixed(2)}</span>`
-              : `<span class="tag tag-pause">En attente d'un signal d'achat</span>`}
-          </div>`).join('');
-      }
-      const upd = document.getElementById('real-updated');
-      if (upd) upd.textContent = 'Mis à jour: ' + new Date().toLocaleTimeString('fr-FR') + ' · Cycle bots toutes les 15 min';
-    } else {
-      const body = document.getElementById('real-body');
-      if (body) body.innerHTML = '⚠️ Moteur non connecté: ' + (sumRes.error||'inconnu');
+      if (body) body.innerHTML = '<div style="color:var(--red);font-size:11px">\u26A0\uFE0F Moteur non connect\u00e9: '+(sumRes.error||'inconnu')+'</div>';
+      return;
     }
-    const ordEl = document.getElementById('real-orders-count');
-    if (ordEl) ordEl.textContent = ordRes.ok ? ordRes.orders.length : '—';
+
+    const setTxt = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
+
+    setTxt('real-balance', '$' + sumRes.balance.toFixed(2));
+    const balSub = document.getElementById('real-balance-sub');
+    if (balSub) { balSub.textContent = 'USDT \u00b7 Trading unifi\u00e9'; balSub.style.color = 'var(--green)'; }
+    setTxt('real-bots', String(sumRes.bots.filter(b=>b.active).length));
+
+    const totalPnl = sumRes.bots.reduce((s,b)=>s+(b.pnl||0),0);
+    const openCount = sumRes.bots.filter(b=>b.position).length;
+    const pnlEl = document.getElementById('real-pnl');
+    if (pnlEl) { pnlEl.textContent = (totalPnl>=0?'+$':'-$') + Math.abs(totalPnl).toFixed(2); pnlEl.style.color = totalPnl>=0 ? 'var(--green)' : 'var(--red)'; }
+    setTxt('real-pnl-sub', openCount + ' position(s) ouverte(s)');
+
+    const gold = sumRes.bots.find(b=>b.id==='gold');
+    if (gold) {
+      if (gold.position) {
+        setTxt('real-gold', ((gold.pnl||0)>=0?'+$':'-$')+Math.abs(gold.pnl||0).toFixed(2));
+        setTxt('real-gold-sub', 'Position @ $'+gold.position.price);
+      } else {
+        setTxt('real-gold', 'Pr\u00eat');
+        setTxt('real-gold-sub', 'En attente signal achat');
+      }
+    }
+
+    const body = document.getElementById('real-body');
+    if (body) {
+      let html = '';
+      for (const b of sumRes.bots) {
+        const icon = b.id==='gold' ? '\u{1F947}' : (b.id==='btc' ? '\u20BF' : '\u039E');
+        const status = b.position
+          ? '<span class="tag tag-run">Position @ $'+b.position.price+'</span> <span class="pnl '+((b.pnl||0)>=0?'up':'dn')+'">'+((b.pnl||0)>=0?'+':'')+'$'+(b.pnl||0).toFixed(2)+'</span>'
+          : '<span class="tag tag-pause">En attente d\u2019un signal d\u2019achat</span>';
+        html += '<div style="display:flex;align-items:center;gap:10px;padding:9px 10px;background:var(--bg-2);border:1px solid var(--border);border-radius:8px">'
+          + '<span style="font-size:15px">'+icon+'</span>'
+          + '<div style="flex:1;font-size:11px"><strong style="color:var(--t0)">'+b.name+'</strong> \u00b7 '+b.symbol+' \u00b7 Capital: $'+b.capital+'</div>'
+          + status + '</div>';
+      }
+      body.innerHTML = html || '<div style="color:var(--t2);font-size:11px">Aucun bot configur\u00e9</div>';
+    }
+    setTxt('real-updated', 'Mis \u00e0 jour: ' + new Date().toLocaleTimeString('fr-FR') + ' \u00b7 Cycle bots toutes les 15 min');
+    setTxt('real-orders-count', ordRes.ok ? String(ordRes.orders.length) : '\u2014');
   } catch(e) {
     const body = document.getElementById('real-body');
-    if (body) body.innerHTML = '⚠️ Erreur de connexion au serveur';
+    if (body) body.innerHTML = '<div style="color:var(--red);font-size:11px">\u26A0\uFE0F Erreur de connexion au serveur</div>';
   }
 }
 setInterval(loadRealData, 60000); // refresh toutes les 60s
