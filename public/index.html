@@ -630,12 +630,57 @@ function renderGold(c) {
 }
 
 function renderActivity(c) {
-  c.innerHTML = `<div class="card">
-    <div class="card-header"><div class="card-title">Journal d'activité</div><span class="tag tag-cfd" style="margin-left:8px">🥇 Or inclus</span><span class="tag tag-ai" style="margin-left:4px;background:var(--ai-dim);color:var(--ai);border-color:var(--ai-glow)">IA incluse</span></div>
-    <div class="card-body" style="padding:0 13px">
-      ${logs.map(l=>`<div class="log-item"><div class="log-dot ${l.type}"></div><div class="log-text">${l.text}</div><div class="log-time">${l.time}</div></div>`).join('')}
+  c.innerHTML = `<div class="card" style="border-color:rgba(0,230,118,.25)">
+    <div class="card-header">
+      <span style="font-size:14px">🟢</span>
+      <div><div class="card-title" style="color:var(--green)">Journal d'activité — Ordres Réels Bybit</div><div class="card-sub">Historique des trades exécutés par vos bots</div></div>
+      <div class="ch-actions"><button class="btn btn-ghost" onclick="renderActivity(document.getElementById('content'))">↺ Actualiser</button></div>
+    </div>
+    <div class="card-body" style="padding:0 13px" id="act-list">
+      <div style="color:var(--t2);font-size:11px;padding:14px 0">Chargement de l'historique Bybit...</div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-header"><div class="card-title">Statut des bots en direct</div></div>
+    <div class="card-body" style="padding:0 13px" id="act-bots">
+      <div style="color:var(--t2);font-size:11px;padding:14px 0">Chargement...</div>
     </div>
   </div>`;
+
+  // Ordres réels
+  fetch('/api/real/orders').then(r=>r.json()).then(d => {
+    const list = document.getElementById('act-list');
+    if (!list) return;
+    if (!d.ok) { list.innerHTML = '<div style="color:var(--red);font-size:11px;padding:14px 0">⚠️ '+(d.error||'Erreur')+'</div>'; return; }
+    if (!d.orders.length) {
+      list.innerHTML = `<div style="padding:16px 0;text-align:center">
+        <div style="font-size:24px;margin-bottom:8px">⏳</div>
+        <div style="font-size:12px;color:var(--t1);font-weight:600;margin-bottom:4px">Aucun trade exécuté pour l'instant</div>
+        <div style="font-size:10px;color:var(--t2);line-height:1.6">C'est normal ! Les bots attendent que les prix baissent (RSI < 35-40) pour acheter.<br>Un bon bot qui attend vaut mieux qu'un mauvais bot qui trade.</div>
+      </div>`;
+      return;
+    }
+    list.innerHTML = d.orders.map(o => `
+      <div class="log-item">
+        <div class="log-dot ${o.side==='Buy'?'buy':'sell'}"></div>
+        <div class="log-text"><strong>${o.side==='Buy'?'▲ Achat':'▼ Vente'}</strong> ${o.symbol} · ${o.qty} @ $${o.price} · <span style="color:var(--t2)">${o.status}</span></div>
+        <div class="log-time">${o.time}</div>
+      </div>`).join('');
+  }).catch(()=>{
+    const list = document.getElementById('act-list');
+    if (list) list.innerHTML = '<div style="color:var(--red);font-size:11px;padding:14px 0">⚠️ Serveur injoignable</div>';
+  });
+
+  // Statut bots
+  fetch('/api/real/summary').then(r=>r.json()).then(d => {
+    const el = document.getElementById('act-bots');
+    if (!el || !d.ok) return;
+    el.innerHTML = d.bots.map(b => `
+      <div class="log-item">
+        <div class="log-dot ${b.position?'buy':'info'}"></div>
+        <div class="log-text"><strong>${b.name}</strong> (${b.symbol}) — ${b.position ? 'Position ouverte @ $'+b.position.price+' · PnL: '+((b.pnl||0)>=0?'+':'')+'$'+(b.pnl||0).toFixed(2) : 'Analyse le marché toutes les 15 min · en attente d\'un signal d\'achat'}</div>
+      </div>`).join('');
+  }).catch(()=>{});
 }
 
 function renderAPITab(c) {
