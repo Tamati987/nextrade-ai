@@ -262,6 +262,25 @@ app.get('/api/real/summary', async (req, res) => {
   }
 });
 
+// ── DERNIÈRES DÉCISIONS IA ──
+app.get('/api/real/verdicts', (req, res) => {
+  try {
+    const { lastVerdicts, BOTS, aiState } = require('./trading-engine');
+    const out = BOTS.map(b => ({ id: b.id, name: b.name, verdict: lastVerdicts.get(b.id) || null }));
+    res.json({ ok: true, verdicts: out, aiEnabled: aiState.enabled });
+  } catch(e) { res.json({ ok: false, error: e.message }); }
+});
+
+// ── PAUSE/REPRISE DE LA VALIDATION IA ──
+app.post('/api/real/ai/toggle', (req, res) => {
+  try {
+    const { aiState } = require('./trading-engine');
+    aiState.enabled = !aiState.enabled;
+    console.log(`🧠 Validation Claude → ${aiState.enabled ? 'ACTIVÉE' : 'EN PAUSE'}`);
+    res.json({ ok: true, aiEnabled: aiState.enabled });
+  } catch(e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
 // ── ACTIVER/DÉSACTIVER UN BOT ──
 app.post('/api/real/bots/:id/toggle', (req, res) => {
   try {
