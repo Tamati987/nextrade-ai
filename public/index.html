@@ -247,6 +247,7 @@ canvas{display:block}
     <div class="ntab" onclick="goTab('gold',this)">🥇 XAU/USD</div>
     <div class="ntab" onclick="goTab('activity',this)">Activité</div>
     <div class="ntab" onclick="window.open('/paper-trading.html','_blank')" style="color:var(--green)">📈 Paper Trading</div>
+    <div class="ntab" onclick="window.open('/bots-live.html','_blank')" style="color:var(--gold)">🕯 Bots Live</div>
     <div class="ntab" onclick="goTab('deploy',this)">🚀 Déploiement</div>
   </div>
   <div class="spacer"></div>
@@ -270,6 +271,7 @@ canvas{display:block}
     <div class="s-item" onclick="goTab('gold',this)"><span class="ic">🥇</span>XAU/USD Bot</div>
     <div class="s-item" onclick="goTab('activity',this)"><span class="ic">⚡</span>Activité<span class="s-badge a">9</span></div>
     <div class="s-item" onclick="window.open('/paper-trading.html','_blank')" style="color:var(--green)"><span class="ic">📈</span>Paper Trading<span class="s-badge g">Live</span></div>
+    <div class="s-item" onclick="window.open('/bots-live.html','_blank')" style="color:var(--gold)"><span class="ic">🕯</span>Bots Live<span class="s-badge g">Bybit</span></div>
     <div class="s-label">IA & Déploiement</div>
     <div class="s-item" onclick="goTab('deploy',this)"><span class="ic">🚀</span>Déploiement</div>
     <div class="s-item" onclick="goTab('api',this)"><span class="ic">🔗</span>API Exchange</div>
@@ -479,6 +481,7 @@ function renderDashboard(c) {
         <button class="btn btn-ghost" style="justify-content:flex-start" onclick="goTab('activity',null)">\u26A1 Activit\u00e9 \u2014 Ordres r\u00e9els Bybit</button>
         <button class="btn btn-ghost" style="justify-content:flex-start" onclick="goTab('gold',null)">\u{1F947} Bot Or \u2014 Gold Sentinel</button>
         <button class="btn btn-ghost" style="justify-content:flex-start;color:var(--green);border-color:rgba(0,230,118,.3)" onclick="window.open('/paper-trading.html','_blank')">\u{1F4C8} Paper Trading \u2014 Simulateur $10 000</button>
+        <button class="btn btn-ghost" style="justify-content:flex-start;color:var(--gold);border-color:rgba(255,215,0,.3)" onclick="window.open('/bots-live.html','_blank')">\u{1F56F} Bots Live \u2014 Bougies + RSI + positions</button>
         <button class="btn btn-ghost" style="justify-content:flex-start" onclick="goTab('settings',null)">\u2699\uFE0F Param\u00e8tres \u2014 Pause / activation des bots</button>
         <button class="btn btn-ai" style="justify-content:flex-start" onclick="askQ('Fais un point complet sur mes 3 bots r\u00e9els (Gold Sentinel XAUT, Alpha RSI BTC, Grid ETH) : conditions de march\u00e9 actuelles et probabilit\u00e9 de signal d achat prochainement.')">\u{1F9E0} Demander un point \u00e0 Claude</button>
       </div>
