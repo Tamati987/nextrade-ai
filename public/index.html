@@ -277,7 +277,7 @@ canvas{display:block}
     <div style="margin-top:auto;padding:8px 0">
       <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:7px;padding:9px">
         <div style="font-size:8px;color:var(--t2);margin-bottom:3px">EXCHANGE</div>
-        <div style="display:flex;align-items:center;gap:5px;font-size:10px;color:var(--green);font-weight:600;font-family:var(--mono)"><div class="pulsedot" style="background:var(--green)"></div>Binance · Live</div>
+        <div style="display:flex;align-items:center;gap:5px;font-size:10px;color:var(--green);font-weight:600;font-family:var(--mono)"><div class="pulsedot" style="background:var(--green)"></div>Bybit · Live</div>
       </div>
     </div>
   </nav>
@@ -437,12 +437,22 @@ function renderTab(t) {
 
 function renderDashboard(c) {
   c.innerHTML = `
-  <div class="stat-grid">
-    <div class="stat-card c-blue"><div class="s-ico">💰</div><div class="s-lbl">Portefeuille</div><div class="s-val">$5 272</div><div class="s-chg up">▲ +41.8%</div></div>
-    <div class="stat-card c-green"><div class="s-ico">📈</div><div class="s-lbl">PnL Total</div><div class="s-val" style="color:var(--green)">+$2 272</div><div class="s-chg up">▲ Meilleur mois</div></div>
-    <div class="stat-card c-gold"><div class="s-ico">🥇</div><div class="s-lbl">PnL Or (XAU)</div><div class="s-val" style="color:var(--gold)">+$344</div><div class="s-chg up">▲ 65% win rate</div></div>
-    <div class="stat-card c-purple"><div class="s-ico">⚡</div><div class="s-lbl">Trades Aujourd'hui</div><div class="s-val">61</div><div class="s-chg up">▲ +14 vs hier</div></div>
-    <div class="stat-card c-ai"><div class="s-ico">🧠</div><div class="s-lbl">Signaux IA</div><div class="s-val" style="color:var(--ai)">18</div><div class="s-chg up">▲ 14 validés</div></div>
+  <div class="stat-grid" id="real-stats">
+    <div class="stat-card c-blue"><div class="s-ico">💰</div><div class="s-lbl">Solde Réel Bybit</div><div class="s-val" id="real-balance">…</div><div class="s-chg" id="real-balance-sub" style="color:var(--t2)">Connexion...</div></div>
+    <div class="stat-card c-green"><div class="s-ico">📈</div><div class="s-lbl">PnL Positions</div><div class="s-val" id="real-pnl">$0.00</div><div class="s-chg" id="real-pnl-sub" style="color:var(--t2)">Aucune position</div></div>
+    <div class="stat-card c-gold"><div class="s-ico">🥇</div><div class="s-lbl">Bot Or (PAXG)</div><div class="s-val" id="real-gold" style="color:var(--gold)">—</div><div class="s-chg" id="real-gold-sub" style="color:var(--t2)">En attente signal</div></div>
+    <div class="stat-card c-purple"><div class="s-ico">🤖</div><div class="s-lbl">Bots Actifs</div><div class="s-val" id="real-bots">…</div><div class="s-chg up">Moteur Bybit Live</div></div>
+    <div class="stat-card c-ai"><div class="s-ico">📋</div><div class="s-lbl">Ordres Réels</div><div class="s-val" id="real-orders-count" style="color:var(--ai)">…</div><div class="s-chg" style="color:var(--t2)">Historique Bybit</div></div>
+  </div>
+
+  <!-- COMPTE RÉEL BYBIT -->
+  <div class="card" style="border-color:rgba(0,230,118,.25)">
+    <div class="card-header">
+      <span style="font-size:15px">🟢</span>
+      <div><div class="card-title" style="color:var(--green)">Compte Réel Bybit — Trading Live</div><div class="card-sub" id="real-updated">Chargement...</div></div>
+      <div class="ch-actions"><button class="btn btn-ghost" onclick="loadRealData()">↺ Actualiser</button></div>
+    </div>
+    <div class="card-body" id="real-body" style="font-size:11px;color:var(--t1)">Connexion au moteur de trading...</div>
   </div>
 
   <div class="analysis-card">
@@ -597,17 +607,39 @@ function renderActivity(c) {
 
 function renderAPITab(c) {
   c.innerHTML = `<div class="card">
-    <div class="card-header"><div class="card-title">Connexions API</div></div>
-    <div class="card-body" style="display:flex;flex-direction:column;gap:8px">
-      ${['Binance','Bybit','OKX','Kraken'].map((ex,i)=>`
-      <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:8px;padding:11px 13px;display:flex;align-items:center;gap:11px">
-        <div style="font-size:17px">${['🟡','🟠','⚫','🔵'][i]}</div>
-        <div style="flex:1"><div style="font-size:11px;font-weight:600">${ex}</div><div style="font-size:9px;color:var(--t2);margin-top:1px">${i===0?'Connecté — lecture/écriture':'Non configuré'}</div></div>
-        ${i===0?`<div style="font-size:9px;color:var(--green);font-weight:600;display:flex;align-items:center;gap:4px"><div class="pulsedot" style="background:var(--green)"></div>Actif</div>`:''}
-        <button class="btn ${i===0?'btn-ghost':'btn-primary'}" style="padding:5px 10px;font-size:9px">${i===0?'Modifier':'Connecter'}</button>
-      </div>`).join('')}
+    <div class="card-header"><div><div class="card-title">Connexions API Exchange</div><div class="card-sub">Statut réel des connexions serveur</div></div>
+    <div class="ch-actions"><button class="btn btn-ghost" onclick="renderAPITab(document.getElementById('content'))">↺ Actualiser</button></div></div>
+    <div class="card-body" style="display:flex;flex-direction:column;gap:8px" id="api-list">
+      <div style="color:var(--t2);font-size:11px;padding:10px">Vérification des connexions...</div>
+    </div>
+    <div style="padding:0 14px 14px">
+      <div style="background:var(--ai-dim);border:1px solid var(--ai-glow);border-radius:9px;padding:12px;font-size:11px;color:var(--t1);line-height:1.7">
+        <strong style="color:var(--ai)">🔐 Sécurité :</strong> les clés API sont stockées côté serveur (variables Railway), jamais dans le navigateur. Pour connecter un nouvel exchange, ajoutez ses clés dans Railway → Variables (ex: OKX_API_KEY) puis demandez à Claude d'ajouter le support.
+      </div>
     </div>
   </div>`;
+  // Charger le statut réel
+  fetch('/api/real/summary').then(r=>r.json()).then(d => {
+    const list = document.getElementById('api-list');
+    if (!list) return;
+    const bybitOk = d.ok;
+    const exchanges = [
+      { name:'Bybit', icon:'🟠', connected: bybitOk, detail: bybitOk ? `Connecté — Solde: $${d.balance.toFixed(2)} USDT · ${d.bots.filter(b=>b.active).length} bots actifs` : 'Erreur: '+(d.error||'connexion échouée') },
+      { name:'Binance', icon:'🟡', connected: false, detail: 'Non configuré — données de marché publiques uniquement (paper trading)' },
+      { name:'OKX', icon:'⚫', connected: false, detail: 'Non configuré' },
+      { name:'Kraken', icon:'🔵', connected: false, detail: 'Non configuré' },
+    ];
+    list.innerHTML = exchanges.map(ex => `
+      <div style="background:var(--bg-2);border:1px solid ${ex.connected?'rgba(0,230,118,.3)':'var(--border)'};border-radius:9px;padding:12px 14px;display:flex;align-items:center;gap:12px">
+        <div style="font-size:18px">${ex.icon}</div>
+        <div style="flex:1"><div style="font-size:12px;font-weight:600">${ex.name}${ex.connected?' <span style="font-size:9px;color:var(--green)">● LIVE</span>':''}</div>
+        <div style="font-size:10px;color:${ex.connected?'var(--green)':'var(--t2)'};margin-top:2px">${ex.detail}</div></div>
+        <button class="btn ${ex.connected?'btn-ghost':'btn-primary'}" style="padding:5px 11px;font-size:10px" onclick="showToast('${ex.connected?'✅ '+ex.name+' est géré via les variables Railway':'💡 Ajoutez les clés '+ex.name+' dans Railway → Variables'}')">${ex.connected?'Géré via Railway':'Comment connecter'}</button>
+      </div>`).join('');
+  }).catch(() => {
+    const list = document.getElementById('api-list');
+    if (list) list.innerHTML = '<div style="color:var(--red);font-size:11px;padding:10px">⚠️ Impossible de joindre le serveur</div>';
+  });
 }
 
 function renderDeploy(c) {
@@ -789,6 +821,74 @@ function appendMsg(role,av,sender,text) {
 }
 
 function scrollChat(){const m=document.getElementById('chat-messages');setTimeout(()=>m.scrollTop=m.scrollHeight,50)}
+
+// ── DONNÉES RÉELLES BYBIT ──
+async function loadRealData() {
+  try {
+    const [sumRes, ordRes] = await Promise.all([
+      fetch('/api/real/summary').then(r=>r.json()),
+      fetch('/api/real/orders').then(r=>r.json()),
+    ]);
+    if (sumRes.ok) {
+      const balEl = document.getElementById('real-balance');
+      if (balEl) balEl.textContent = '$' + sumRes.balance.toFixed(2);
+      const balSub = document.getElementById('real-balance-sub');
+      if (balSub) { balSub.textContent = 'USDT · Trading unifié'; balSub.style.color = 'var(--green)'; }
+      const botsEl = document.getElementById('real-bots');
+      if (botsEl) botsEl.textContent = sumRes.bots.filter(b=>b.active).length;
+
+      // PnL total des positions ouvertes
+      const totalPnl = sumRes.bots.reduce((s,b)=>s+(b.pnl||0),0);
+      const openCount = sumRes.bots.filter(b=>b.position).length;
+      const pnlEl = document.getElementById('real-pnl');
+      const pnlSub = document.getElementById('real-pnl-sub');
+      if (pnlEl) {
+        pnlEl.textContent = (totalPnl>=0?'+$':'-$') + Math.abs(totalPnl).toFixed(2);
+        pnlEl.style.color = totalPnl>=0 ? 'var(--green)' : 'var(--red)';
+      }
+      if (pnlSub) pnlSub.textContent = openCount + ' position(s) ouverte(s)';
+
+      // Bot Or
+      const gold = sumRes.bots.find(b=>b.id==='gold');
+      const goldEl = document.getElementById('real-gold');
+      const goldSub = document.getElementById('real-gold-sub');
+      if (gold && goldEl) {
+        if (gold.position) {
+          goldEl.textContent = (gold.pnl>=0?'+$':'-$')+Math.abs(gold.pnl||0).toFixed(2);
+          if (goldSub) goldSub.textContent = 'Position @ $'+gold.position.price;
+        } else {
+          goldEl.textContent = 'Prêt';
+          if (goldSub) goldSub.textContent = 'En attente signal achat';
+        }
+      }
+
+      // Corps de la carte
+      const body = document.getElementById('real-body');
+      if (body) {
+        body.innerHTML = sumRes.bots.map(b => `
+          <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
+            <span style="font-size:14px">${b.id==='gold'?'🥇':b.id==='btc'?'₿':'Ξ'}</span>
+            <div style="flex:1"><strong style="color:var(--t0)">${b.name}</strong> · ${b.symbol} · Capital: $${b.capital}</div>
+            ${b.position
+              ? `<span class="tag tag-run">Position ouverte @ $${b.position.price}</span><span class="pnl ${(b.pnl||0)>=0?'up':'dn'}">${(b.pnl||0)>=0?'+':''}$${(b.pnl||0).toFixed(2)}</span>`
+              : `<span class="tag tag-pause">En attente d'un signal d'achat</span>`}
+          </div>`).join('');
+      }
+      const upd = document.getElementById('real-updated');
+      if (upd) upd.textContent = 'Mis à jour: ' + new Date().toLocaleTimeString('fr-FR') + ' · Cycle bots toutes les 15 min';
+    } else {
+      const body = document.getElementById('real-body');
+      if (body) body.innerHTML = '⚠️ Moteur non connecté: ' + (sumRes.error||'inconnu');
+    }
+    const ordEl = document.getElementById('real-orders-count');
+    if (ordEl) ordEl.textContent = ordRes.ok ? ordRes.orders.length : '—';
+  } catch(e) {
+    const body = document.getElementById('real-body');
+    if (body) body.innerHTML = '⚠️ Erreur de connexion au serveur';
+  }
+}
+setInterval(loadRealData, 60000); // refresh toutes les 60s
+setTimeout(loadRealData, 1000);
 
 // ── INIT ──
 renderTab('dashboard');
