@@ -432,6 +432,7 @@ function renderTab(t) {
   else if(t==='activity') renderActivity(c);
   else if(t==='deploy') renderDeploy(c);
   else if(t==='api') renderAPITab(c);
+  else if(t==='settings') renderSettings(c);
   else c.innerHTML=`<div class="card"><div class="card-body" style="text-align:center;padding:36px;color:var(--t2)"><div style="font-size:32px;margin-bottom:8px">🚧</div><div style="font-size:12px;color:var(--t1);font-weight:600">En développement</div></div></div>`;
 }
 
@@ -899,6 +900,70 @@ function appendMsg(role,av,sender,text) {
 }
 
 function scrollChat(){const m=document.getElementById('chat-messages');setTimeout(()=>m.scrollTop=m.scrollHeight,50)}
+
+// ── PARAMÈTRES ──
+function renderSettings(c) {
+  c.innerHTML = `
+  <div class="card" style="border-color:rgba(0,230,118,.25)">
+    <div class="card-header">
+      <span style="font-size:14px">⚙️</span>
+      <div><div class="card-title">Contrôle des Bots — Temps Réel</div><div class="card-sub">Activez ou mettez en pause chaque bot instantanément</div></div>
+      <div class="ch-actions"><button class="btn btn-ghost" onclick="renderSettings(document.getElementById('content'))">↺ Actualiser</button></div>
+    </div>
+    <div class="card-body" id="set-bots" style="display:flex;flex-direction:column;gap:8px">
+      <div style="color:var(--t2);font-size:11px;padding:10px">Chargement...</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><div class="card-title">Services connectés</div></div>
+    <div class="card-body" style="display:flex;flex-direction:column;gap:9px;font-size:11px">
+      ${[['🧠 Claude IA','Assistant intégré (Sonnet 4.6)','var(--green)','Actif'],['📈 Bybit','Moteur de trading spot — EU West','var(--green)','Live'],['🅿️ PayPal','Abonnements (à finaliser: PLAN_ID)','var(--amber)','Configuré'],['💳 Stripe','Non configuré (optionnel)','var(--t2)','Inactif']].map(([n,d,col,st])=>`
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border)">
+        <div><div style="font-size:12px;font-weight:600;color:var(--t0)">${n}</div><div style="font-size:9px;color:var(--t2);margin-top:1px">${d}</div></div>
+        <span style="font-size:10px;font-weight:700;color:${col}">● ${st}</span>
+      </div>`).join('')}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><div class="card-title">Modifier la stratégie des bots</div></div>
+    <div class="card-body" style="font-size:11px;color:var(--t1);line-height:1.8">
+      Les seuils (RSI, Take Profit, Stop Loss, capital) sont définis dans <strong style="color:var(--t0)">trading-engine.js</strong> sur GitHub (lignes 15-19). Pour les modifier : éditez le fichier → Commit → Railway redéploie automatiquement.<br>
+      <span style="color:var(--t2)">💡 Astuce : demandez à Claude (panneau de droite) quels paramètres utiliser selon les conditions de marché avant de modifier.</span>
+    </div>
+  </div>`;
+
+  fetch('/api/real/summary').then(r=>r.json()).then(d => {
+    const el = document.getElementById('set-bots');
+    if (!el) return;
+    if (!d.ok) { el.innerHTML = '<div style="color:var(--red);font-size:11px;padding:10px">⚠️ '+(d.error||'Erreur')+'</div>'; return; }
+    el.innerHTML = d.bots.map(b => `
+      <div class="bot-row" style="grid-template-columns:32px 1fr 100px 130px;cursor:default">
+        <div class="b-av" style="background:${b.id==='gold'?'#FFD70022':b.id==='btc'?'#00D4FF22':'#A78BFA22'};border:1px solid ${b.id==='gold'?'#FFD70044':b.id==='btc'?'#00D4FF44':'#A78BFA44'}">${b.id==='gold'?'🥇':b.id==='btc'?'₿':'Ξ'}</div>
+        <div><div class="b-name">${b.name}</div><div class="b-desc">${b.symbol} · Capital $${b.capital}${b.position?' · <span style=\"color:var(--green)\">position ouverte</span>':''}</div></div>
+        <div><span class="tag ${b.active?'tag-run':'tag-pause'}" id="set-tag-${b.id}">${b.active?'Actif':'Pausé'}</span></div>
+        <div><button class="btn ${b.active?'btn-ghost':'btn-ai'}" style="padding:6px 12px;font-size:10px" id="set-btn-${b.id}" onclick="toggleRealBot('${b.id}')">${b.active?'⏸ Mettre en pause':'▶ Activer'}</button></div>
+      </div>`).join('');
+  }).catch(()=>{
+    const el = document.getElementById('set-bots');
+    if (el) el.innerHTML = '<div style="color:var(--red);font-size:11px;padding:10px">⚠️ Serveur injoignable</div>';
+  });
+}
+
+async function toggleRealBot(id) {
+  try {
+    const r = await fetch('/api/real/bots/'+id+'/toggle', { method:'POST' });
+    const d = await r.json();
+    if (d.ok) {
+      const tag = document.getElementById('set-tag-'+id);
+      const btn = document.getElementById('set-btn-'+id);
+      if (tag) { tag.textContent = d.active?'Actif':'Pausé'; tag.className = 'tag '+(d.active?'tag-run':'tag-pause'); }
+      if (btn) { btn.textContent = d.active?'⏸ Mettre en pause':'▶ Activer'; btn.className = 'btn '+(d.active?'btn-ghost':'btn-ai'); btn.style.padding='6px 12px'; btn.style.fontSize='10px'; }
+      showToast(d.active ? '✅ Bot activé — il analysera au prochain cycle' : '⏸ Bot mis en pause');
+    } else showToast('⚠️ '+(d.error||'Erreur'));
+  } catch(e) { showToast('⚠️ Erreur serveur'); }
+}
 
 // ── DONNÉES RÉELLES BYBIT ──
 async function loadRealData() {
