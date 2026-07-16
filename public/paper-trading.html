@@ -2,7 +2,12 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#00D4FF">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="/manifest.json">
+<link rel="apple-touch-icon" href="/icon-192.png">
 <title>NexTrade AI — Paper Trading</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
@@ -216,6 +221,16 @@ canvas#chart { display:block; }
 ::-webkit-scrollbar { width:4px; height:4px; }
 ::-webkit-scrollbar-track { background:transparent; }
 ::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
+
+@media(max-width:900px){
+  .shell{flex-direction:column;height:auto;overflow:auto}
+  .left-panel,.order-panel{width:100%!important;min-width:0;border:none;border-bottom:1px solid var(--border)}
+  .left-panel{max-height:200px}
+  .chart-area{min-height:360px}
+  .topbar{flex-wrap:wrap;height:auto;padding:8px 10px;gap:6px}
+  .wallet-chip{font-size:10px;padding:4px 8px}
+  html,body{overflow:auto;height:auto}
+}
 </style>
 </head>
 <body>
@@ -924,5 +939,6 @@ window.addEventListener('resize', drawChart);
 // ── START ──
 init();
 </script>
+<script>if('serviceWorker' in navigator){navigator.serviceWorker.register('/sw.js').catch(()=>{});}</script>
 </body>
 </html>
