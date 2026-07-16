@@ -40,6 +40,35 @@ function requireAuth(req, res, next) {
   } catch { res.status(401).json({ error: 'Token invalide' }); }
 }
 
+// ── ADMINISTRATEUR (protège les contrôles + données privées) ──
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
+function isAdmin(req) {
+  if (!ADMIN_PASSWORD) return true; // Pas encore configuré → mode ouvert (ajoutez ADMIN_PASSWORD sur Railway !)
+  const token = (req.headers.authorization || '').replace('Bearer ', '') || req.headers['x-admin-token'] || '';
+  if (!token) return false;
+  try { return !!jwt.verify(token, process.env.JWT_SECRET || 'jwt-secret-2026').admin; }
+  catch(e) { return false; }
+}
+function requireAdmin(req, res, next) {
+  if (isAdmin(req)) return next();
+  res.status(401).json({ ok: false, error: 'Réservé à l\'administrateur' });
+}
+
+app.post('/api/admin/login', (req, res) => {
+  if (!ADMIN_PASSWORD) return res.json({ ok: false, error: 'ADMIN_PASSWORD non configuré dans Railway → Variables' });
+  if (req.body && req.body.password === ADMIN_PASSWORD) {
+    const token = jwt.sign({ admin: true }, process.env.JWT_SECRET || 'jwt-secret-2026', { expiresIn: '30d' });
+    console.log('🔐 Connexion administrateur réussie');
+    return res.json({ ok: true, token });
+  }
+  console.log('⚠️ Tentative de connexion admin échouée');
+  res.status(401).json({ ok: false, error: 'Mot de passe incorrect' });
+});
+
+app.get('/api/admin/check', (req, res) => {
+  res.json({ ok: true, admin: isAdmin(req), protected: !!ADMIN_PASSWORD });
+});
+
 function requireSubscription(req, res, next) {
   const sub = subscriptions.get(req.user.email);
   if (!sub || sub.status !== 'active') return res.status(403).json({ error: 'Abonnement requis' });
@@ -256,7 +285,8 @@ app.get('/api/real/summary', async (req, res) => {
       }
       bots.push({ id: b.id, name: b.name, symbol: b.symbol, capital: b.capital, active: b.active, position: pos, pnl, rsi_buy: b.rsi_buy, rsi_sell: b.rsi_sell, tp: b.tp, sl: b.sl });
     }
-    res.json({ ok: true, balance: +balance.toFixed(2), bots, updatedAt: new Date().toISOString() });
+    const admin = isAdmin(req);
+    res.json({ ok: true, balance: admin ? +balance.toFixed(2) : null, bots, updatedAt: new Date().toISOString(), admin });
   } catch(e) {
     res.json({ ok: false, error: e.message });
   }
@@ -285,7 +315,7 @@ app.get('/api/real/verdicts', (req, res) => {
 });
 
 // ── PAUSE/REPRISE DE LA VALIDATION IA ──
-app.post('/api/real/ai/toggle', (req, res) => {
+app.post('/api/real/ai/toggle', requireAdmin, (req, res) => {
   try {
     const { aiState } = require('./trading-engine');
     aiState.enabled = !aiState.enabled;
@@ -295,7 +325,7 @@ app.post('/api/real/ai/toggle', (req, res) => {
 });
 
 // ── ACTIVER/DÉSACTIVER UN BOT ──
-app.post('/api/real/bots/:id/toggle', (req, res) => {
+app.post('/api/real/bots/:id/toggle', requireAdmin, (req, res) => {
   try {
     const { BOTS } = require('./trading-engine');
     const bot = BOTS.find(b => b.id === req.params.id);
@@ -310,6 +340,7 @@ app.post('/api/real/bots/:id/toggle', (req, res) => {
 
 app.get('/api/real/orders', async (req, res) => {
   try {
+    if (!isAdmin(req)) return res.json({ ok: true, orders: [], restricted: true });
     const { api } = require('./trading-engine');
     const d = await api('GET', '/v5/order/history', { category: 'spot', limit: 20 });
     if (d.retCode !== 0) throw new Error(d.retMsg);
