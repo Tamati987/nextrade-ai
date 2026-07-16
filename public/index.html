@@ -1,7 +1,8 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="fr" translate="no">
 <head>
 <meta charset="UTF-8">
+<meta name="google" content="notranslate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#00D4FF">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -316,7 +317,7 @@ canvas{display:block}
   </div>
   <div class="gold-badge"><div class="pulsedot" style="background:var(--gold)"></div>Gold Sentinel · Actif</div>
   <div class="ai-badge" style="margin-left:6px"><div class="pulsedot" style="background:var(--ai)"></div>Claude IA</div>
-  <button class="btn btn-ghost" id="admin-lock" onclick="adminLogin()" style="margin-left:8px" title="Connexion administrateur">\u{1F512}</button>
+  <button class="btn btn-ghost" id="admin-lock" style="margin-left:8px" title="Connexion administrateur">\u{1F512}</button>
   <button class="btn btn-ai" onclick="openModal()" style="margin-left:6px">+ Bot</button>
 </div>
 
@@ -1011,6 +1012,15 @@ async function toggleRealBot(id) {
 // ── ADMINISTRATION ──
 let adminToken = localStorage.getItem('nt_admin') || '';
 function adminHeaders() { return adminToken ? { 'x-admin-token': adminToken } : {}; }
+
+// Attache le clic du cadenas de façon robuste (résiste à la traduction)
+function wireAdminLock(){
+  const el = document.getElementById('admin-lock');
+  if (el && !el.dataset.wired){ el.dataset.wired='1'; el.addEventListener('click', adminLogin); }
+}
+document.addEventListener('DOMContentLoaded', wireAdminLock);
+setTimeout(wireAdminLock, 500);
+setTimeout(wireAdminLock, 1500);
 
 async function adminLogin() {
   if (adminToken) {
