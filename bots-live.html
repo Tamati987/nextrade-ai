@@ -2,7 +2,12 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#00D4FF">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="/manifest.json">
+<link rel="apple-touch-icon" href="/icon-192.png">
 <title>NexTrade AI — Bots Live · Données Bybit</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
@@ -59,6 +64,16 @@ canvas{display:block;width:100%}
 .err{padding:30px;text-align:center;color:var(--t2);font-size:11px}
 .loading{padding:40px;text-align:center;color:var(--t2);font-size:11px}
 @media(max-width:700px){.p-stats{width:100%;margin-left:0;justify-content:space-between}}
+
+@media(max-width:700px){
+  .topbar{flex-wrap:wrap;height:auto;padding:8px 10px;gap:6px}
+  .grid{padding:8px;gap:10px}
+  .panel-head{flex-wrap:wrap;gap:6px;padding:9px 10px}
+  .p-stats{width:100%;margin-left:0;justify-content:space-between;gap:8px}
+  .p-price{font-size:14px;margin-left:0}
+  canvas{height:240px!important}
+  .live-badge{font-size:9px}
+}
 </style>
 </head>
 <body>
@@ -305,5 +320,6 @@ loadAll();
 refreshTimer = setInterval(loadAll, 60000);
 window.addEventListener('resize', () => { for (const b of bots) loadBotChart(b); });
 </script>
+<script>if('serviceWorker' in navigator){navigator.serviceWorker.register('/sw.js').catch(()=>{});}</script>
 </body>
 </html>
