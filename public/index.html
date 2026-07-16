@@ -2,7 +2,13 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#00D4FF">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="NexTrade AI">
+<link rel="manifest" href="/manifest.json">
+<link rel="apple-touch-icon" href="/icon-192.png">
 <title>NexTrade AI — Powered by Claude</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap');
@@ -234,12 +240,63 @@ canvas{display:block}
 
 @media(max-width:1100px){.ai-panel{width:280px;min-width:280px}}
 @media(max-width:900px){.ai-panel{display:none}}
+
+/* ═══════════ RESPONSIVE MOBILE / TABLETTE ═══════════ */
+/* Bouton burger (caché sur desktop) */
+.burger{display:none;width:32px;height:32px;border-radius:7px;background:var(--bg-2);border:1px solid var(--border);color:var(--t0);cursor:pointer;font-size:16px;align-items:center;justify-content:center}
+.sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:98}
+
+@media (max-width: 1100px){
+  .ai-panel{width:300px;min-width:300px}
+  .stat-grid{grid-template-columns:repeat(3,1fr)!important}
+  .two-col,.three-col{grid-template-columns:1fr!important}
+}
+
+@media (max-width: 860px){
+  /* Sidebar devient un tiroir coulissant */
+  .burger{display:flex}
+  .sidebar{position:fixed;left:0;top:0;bottom:0;z-index:99;transform:translateX(-100%);transition:transform .25s ease;box-shadow:4px 0 24px rgba(0,0,0,.4)}
+  .sidebar.open{transform:translateX(0)}
+  .sidebar-overlay.show{display:block}
+  /* Panneau IA passe en dessous, pleine largeur */
+  .main{flex-direction:column}
+  .ai-panel{width:100%!important;min-width:0;border-left:none;border-top:1px solid var(--border);max-height:420px}
+  .content{padding:12px}
+  /* Nav tabs du haut scrollables */
+  .nav-tabs{overflow-x:auto;flex-wrap:nowrap;-webkit-overflow-scrolling:touch;max-width:100%}
+  .nav-tabs::-webkit-scrollbar{height:0}
+  .ntab{white-space:nowrap;flex-shrink:0}
+  /* Ticker masqué (trop large) */
+  .ticker{display:none!important}
+  .stat-grid{grid-template-columns:repeat(2,1fr)!important;gap:8px}
+  .s-val{font-size:16px!important}
+  /* Bot rows en colonne */
+  .bot-row{grid-template-columns:32px 1fr auto!important;gap:8px!important}
+  .bot-row > div:nth-child(n+4){display:none}
+  .topnav{padding:0 10px;gap:6px}
+  .logo{font-size:13px}
+}
+
+@media (max-width: 520px){
+  .stat-grid{grid-template-columns:1fr 1fr!important}
+  h1{font-size:22px!important}
+  .modal{width:94vw!important}
+  .card-header{flex-wrap:wrap;gap:6px}
+  .ch-actions{width:100%;margin-left:0}
+  .btn{font-size:10px;padding:6px 10px}
+}
+/* Support du notch iPhone */
+@supports (padding: max(0px)){
+  .topnav{padding-left:max(10px,env(safe-area-inset-left));padding-right:max(10px,env(safe-area-inset-right))}
+}
+
 </style>
 </head>
 <body>
 
 <!-- TOP NAV -->
 <div class="topnav">
+  <button class="burger" onclick="toggleSidebar()">\u2630</button>
   <div class="logo"><div class="logo-icon">⚡</div>Nex<span>Trade</span> AI</div>
   <div class="nav-tabs">
     <div class="ntab active" onclick="goTab('dashboard',this)">Dashboard</div>
@@ -259,7 +316,8 @@ canvas{display:block}
   </div>
   <div class="gold-badge"><div class="pulsedot" style="background:var(--gold)"></div>Gold Sentinel · Actif</div>
   <div class="ai-badge" style="margin-left:6px"><div class="pulsedot" style="background:var(--ai)"></div>Claude IA</div>
-  <button class="btn btn-ai" onclick="openModal()" style="margin-left:8px">+ Bot</button>
+  <button class="btn btn-ghost" id="admin-lock" onclick="adminLogin()" style="margin-left:8px" title="Connexion administrateur">\u{1F512}</button>
+  <button class="btn btn-ai" onclick="openModal()" style="margin-left:6px">+ Bot</button>
 </div>
 
 <!-- SHELL -->
@@ -629,10 +687,14 @@ function renderActivity(c) {
   </div>`;
 
   // Ordres réels
-  fetch('/api/real/orders').then(r=>r.json()).then(d => {
+  fetch('/api/real/orders', { headers: adminHeaders() }).then(r=>r.json()).then(d => {
     const list = document.getElementById('act-list');
     if (!list) return;
     if (!d.ok) { list.innerHTML = '<div style="color:var(--red);font-size:11px;padding:14px 0">⚠️ '+(d.error||'Erreur')+'</div>'; return; }
+    if (d.restricted) {
+      list.innerHTML = '<div style="padding:16px 0;text-align:center"><div style="font-size:22px;margin-bottom:6px">\u{1F512}</div><div style="font-size:11px;color:var(--t1);font-weight:600">Historique r\u00e9serv\u00e9 \u00e0 l\u2019administrateur</div><div style="font-size:10px;color:var(--t2);margin-top:3px">Cliquez sur le cadenas \u{1F512} en haut pour vous connecter.</div></div>';
+      return;
+    }
     if (!d.orders.length) {
       list.innerHTML = `<div style="padding:16px 0;text-align:center">
         <div style="font-size:24px;margin-bottom:8px">⏳</div>
@@ -933,7 +995,8 @@ function renderSettings(c) {
 
 async function toggleRealBot(id) {
   try {
-    const r = await fetch('/api/real/bots/'+id+'/toggle', { method:'POST' });
+    const r = await fetch('/api/real/bots/'+id+'/toggle', { method:'POST', headers: adminHeaders() });
+    if (r.status === 401) { showToast('\u{1F512} R\u00e9serv\u00e9 \u00e0 l\u2019administrateur \u2014 cliquez sur le cadenas en haut'); return; }
     const d = await r.json();
     if (d.ok) {
       const tag = document.getElementById('set-tag-'+id);
@@ -944,6 +1007,50 @@ async function toggleRealBot(id) {
     } else showToast('⚠️ '+(d.error||'Erreur'));
   } catch(e) { showToast('⚠️ Erreur serveur'); }
 }
+
+// ── ADMINISTRATION ──
+let adminToken = localStorage.getItem('nt_admin') || '';
+function adminHeaders() { return adminToken ? { 'x-admin-token': adminToken } : {}; }
+
+async function adminLogin() {
+  if (adminToken) {
+    if (confirm('Vous \u00eates connect\u00e9 en administrateur. Se d\u00e9connecter ?')) {
+      adminToken = ''; localStorage.removeItem('nt_admin');
+      updateLockIcon(false); showToast('\u{1F513} D\u00e9connect\u00e9 du mode admin');
+      loadRealData();
+    }
+    return;
+  }
+  const pwd = prompt('\u{1F510} Mot de passe administrateur :');
+  if (!pwd) return;
+  try {
+    const r = await fetch('/api/admin/login', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ password: pwd }) });
+    const d = await r.json();
+    if (d.ok) {
+      adminToken = d.token; localStorage.setItem('nt_admin', adminToken);
+      updateLockIcon(true); showToast('\u{1F511} Mode administrateur activ\u00e9');
+      loadRealData();
+    } else showToast('\u26A0\uFE0F ' + (d.error || 'Mot de passe incorrect'));
+  } catch(e) { showToast('\u26A0\uFE0F Erreur serveur'); }
+}
+
+function updateLockIcon(isAdm) {
+  const el = document.getElementById('admin-lock');
+  if (el) { el.textContent = isAdm ? '\u{1F511}' : '\u{1F512}'; el.style.borderColor = isAdm ? 'rgba(0,230,118,.4)' : ''; el.title = isAdm ? 'Admin connect\u00e9 \u2014 cliquer pour se d\u00e9connecter' : 'Connexion administrateur'; }
+}
+
+// V\u00e9rifier le statut admin au chargement
+(async () => {
+  try {
+    const d = await fetch('/api/admin/check', { headers: adminHeaders() }).then(r=>r.json());
+    updateLockIcon(d.admin && d.protected);
+    if (d.admin && !d.protected) {
+      // Pas encore de mot de passe configur\u00e9
+      const el = document.getElementById('admin-lock');
+      if (el) { el.textContent = '\u26A0\uFE0F'; el.title = 'Ajoutez ADMIN_PASSWORD dans Railway \u2192 Variables pour prot\u00e9ger l\u2019app'; }
+    }
+  } catch(e) {}
+})();
 
 // ── INTERRUPTEUR VALIDATION IA ──
 function updateAIButton(enabled) {
@@ -961,7 +1068,8 @@ function updateAIButton(enabled) {
 
 async function toggleAI() {
   try {
-    const r = await fetch('/api/real/ai/toggle', { method: 'POST' });
+    const r = await fetch('/api/real/ai/toggle', { method: 'POST', headers: adminHeaders() });
+    if (r.status === 401) { showToast('\u{1F512} R\u00e9serv\u00e9 \u00e0 l\u2019administrateur \u2014 cliquez sur le cadenas en haut'); return; }
     const d = await r.json();
     if (d.ok) {
       updateAIButton(d.aiEnabled);
@@ -973,9 +1081,9 @@ async function toggleAI() {
 // ── DONNÉES RÉELLES BYBIT ──
 async function loadRealData() {
   try {
-    const sumRes = await fetch('/api/real/summary').then(r=>r.json());
+    const sumRes = await fetch('/api/real/summary', { headers: adminHeaders() }).then(r=>r.json());
     let ordRes = { ok:false, orders:[] };
-    try { ordRes = await fetch('/api/real/orders').then(r=>r.json()); } catch(e) {}
+    try { ordRes = await fetch('/api/real/orders', { headers: adminHeaders() }).then(r=>r.json()); } catch(e) {}
 
     if (!sumRes.ok) {
       const body = document.getElementById('real-body');
@@ -985,9 +1093,9 @@ async function loadRealData() {
 
     const setTxt = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
 
-    setTxt('real-balance', '$' + sumRes.balance.toFixed(2));
+    setTxt('real-balance', sumRes.balance !== null ? '$' + sumRes.balance.toFixed(2) : '\u{1F512}');
     const balSub = document.getElementById('real-balance-sub');
-    if (balSub) { balSub.textContent = 'USDT \u00b7 Trading unifi\u00e9'; balSub.style.color = 'var(--green)'; }
+    if (balSub) { balSub.textContent = sumRes.balance !== null ? 'USDT \u00b7 Trading unifi\u00e9' : 'Priv\u00e9 \u2014 admin requis'; balSub.style.color = sumRes.balance !== null ? 'var(--green)' : 'var(--t2)'; }
     setTxt('real-bots', String(sumRes.bots.filter(b=>b.active).length));
 
     const totalPnl = sumRes.bots.reduce((s,b)=>s+(b.pnl||0),0);
@@ -1059,6 +1167,22 @@ async function loadRealData() {
 setInterval(loadRealData, 60000); // refresh toutes les 60s
 setTimeout(loadRealData, 1000);
 
+
+// ── SIDEBAR MOBILE ──
+function toggleSidebar(){
+  const sb=document.querySelector('.sidebar');
+  let ov=document.querySelector('.sidebar-overlay');
+  if(!ov){ov=document.createElement('div');ov.className='sidebar-overlay';ov.onclick=toggleSidebar;document.body.appendChild(ov);}
+  sb.classList.toggle('open');ov.classList.toggle('show');
+}
+// Fermer le tiroir quand on clique un item (mobile)
+document.addEventListener('click',e=>{
+  if(window.innerWidth<=860 && e.target.closest('.s-item')){
+    const sb=document.querySelector('.sidebar');const ov=document.querySelector('.sidebar-overlay');
+    if(sb)sb.classList.remove('open');if(ov)ov.classList.remove('show');
+  }
+});
+
 // ── INIT ──
 renderTab('dashboard');
 window.addEventListener('resize',()=>{
@@ -1085,6 +1209,11 @@ window.addEventListener('resize',()=>{
     }, 800);
   }
 })();
+</script>
+<script>
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch(()=>{});
+}
 </script>
 </body>
 </html>
