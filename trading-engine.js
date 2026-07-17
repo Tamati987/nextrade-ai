@@ -71,11 +71,17 @@ async function getBalance() {
 }
 
 // ── VALIDATION IA CLAUDE (appelée uniquement sur signal d'achat confirmé) ──
+const CLAUDE_TIMEOUT_MS = 8000; // sécurité: ne jamais bloquer un cycle plus de 8s sur l'IA
+
 async function askClaude(bot, ctx) {
   if (!process.env.ANTHROPIC_API_KEY) return { decision: 'CONFIRM', reason: 'IA non configurée — règles seules' };
+  const t0 = Date.now();
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), CLAUDE_TIMEOUT_MS);
   try {
     const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
+      signal: controller.signal,
       headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
       body: JSON.stringify({
         model: 'claude-sonnet-4-6',
@@ -92,13 +98,20 @@ async function askClaude(bot, ctx) {
 Valide ou rejette cette entrée.` }]
       })
     });
+    clearTimeout(timeoutId);
     const d = await res.json();
     const text = d.content?.[0]?.text || '';
     const json = JSON.parse(text.replace(/```json|```/g, '').trim());
+    console.log(`🧠 Claude a répondu en ${Date.now() - t0}ms`);
     return { decision: json.decision === 'REJECT' ? 'REJECT' : 'CONFIRM', confidence: json.confidence, reason: json.reason };
   } catch(e) {
-    // En cas d'erreur IA : on suit les règles (l'IA est un filtre optionnel, jamais bloquant)
-    return { decision: 'CONFIRM', reason: 'IA indisponible — règles RSI appliquées (' + e.message.slice(0,50) + ')' };
+    clearTimeout(timeoutId);
+    const elapsed = Date.now() - t0;
+    // En cas d'erreur IA (y compris timeout) : on suit les règles (l'IA est un filtre optionnel, jamais bloquant)
+    const msg = e.name === 'AbortError'
+      ? `Timeout après ${elapsed}ms (>${CLAUDE_TIMEOUT_MS}ms)`
+      : e.message.slice(0, 50);
+    return { decision: 'CONFIRM', reason: `IA indisponible — règles RSI appliquées (${msg})` };
   }
 }
 
@@ -188,6 +201,7 @@ async function runBot(bot) {
     console.log(`🔎 Filtre confirmation: base=${conditionBase} | rebond=${rsiRebondit} | confirmations=${state.confirmCount}/2`);
 
     if (state.confirmCount >= 2) {
+      const tSignal = Date.now(); // ── début du chrono: signal confirmé, avant exécution ──
       const bal = await getBalance();
       if (bal < bot.capital) { console.log(`⚠️ Solde insuffisant: $${bal.toFixed(2)}`); return; }
 
@@ -206,13 +220,14 @@ async function runBot(bot) {
       console.log(`🧠 Claude: ${verdict.decision}${verdict.confidence ? ' (' + verdict.confidence + '%)' : ''} — ${verdict.reason}`);
       lastVerdicts.set(bot.id, { ...verdict, at: new Date().toISOString(), price, rsi: r });
       if (verdict.decision === 'REJECT') {
-        console.log(`🛑 Entrée rejetée par l'IA — le bot attend un meilleur signal`);
+        console.log(`🛑 Entrée rejetée par l'IA — le bot attend un meilleur signal | temps total: ${Date.now() - tSignal}ms`);
         state.confirmCount = 0;
         return;
       }
 
       const o = await buySpot(bot, price);
       if (o) positions.set(bot.id, { ...o, openedAt: new Date(), aiReason: verdict.reason });
+      console.log(`⏱️ Temps total signal → exécution: ${Date.now() - tSignal}ms`);
       state.confirmCount = 0;
     } else {
       console.log(`⏳ Pas de signal confirmé (RSI=${r}, cible <${bot.rsi_buy})`);
