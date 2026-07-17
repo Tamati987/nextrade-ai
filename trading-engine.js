@@ -1,6 +1,7 @@
 // ═══════════════════════════════════════════════════════
 //   NEXTRADE AI — MOTEUR DE TRADING BYBIT (SPOT)
 //   Buy Low / Sell High — adapté petit capital
+//   + Filtre anti-signal-prématuré (RSI rebond + confirmation 2 cycles)
 // ═══════════════════════════════════════════════════════
 const crypto = require('crypto');
 const fetch = require('node-fetch');
@@ -21,6 +22,16 @@ const BOTS = [
 const positions = new Map();
 const lastVerdicts = new Map(); // dernières décisions IA par bot
 const aiState = { enabled: true }; // interrupteur validation Claude
+
+// ── ÉTAT DE CONFIRMATION DE SIGNAL (anti-signal-prématuré) ──
+const signalState = new Map(); // botId -> { rsiHistory: [], confirmCount: 0 }
+
+function getSignalState(botId) {
+  if (!signalState.has(botId)) {
+    signalState.set(botId, { rsiHistory: [], confirmCount: 0 });
+  }
+  return signalState.get(botId);
+}
 
 function sign(params, ts) {
   return crypto.createHmac('sha256', API_SECRET).update(ts + API_KEY + '5000' + params).digest('hex');
@@ -59,7 +70,7 @@ async function getBalance() {
   return +(usdt?.walletBalance || 0);
 }
 
-// ── VALIDATION IA CLAUDE (appelée uniquement sur signal d'achat) ──
+// ── VALIDATION IA CLAUDE (appelée uniquement sur signal d'achat confirmé) ──
 async function askClaude(bot, ctx) {
   if (!process.env.ANTHROPIC_API_KEY) return { decision: 'CONFIRM', reason: 'IA non configurée — règles seules' };
   try {
@@ -69,11 +80,11 @@ async function askClaude(bot, ctx) {
       body: JSON.stringify({
         model: 'claude-sonnet-4-6',
         max_tokens: 300,
-        system: `Tu es un validateur de trades pour un bot spot (Buy Low / Sell High, petit capital). Un signal d'ACHAT vient d'être détecté par les règles RSI. Ton rôle : le CONFIRMER ou le REJETER selon le contexte technique. Sois conservateur : en cas de doute, REJETTE. Tu ne peux PAS modifier les montants ni la stratégie. Réponds UNIQUEMENT en JSON strict: {"decision":"CONFIRM"|"REJECT","confidence":0-100,"reason":"explication courte en français"}`,
-        messages: [{ role: 'user', content: `Signal ACHAT détecté:
+        system: `Tu es un validateur de trades pour un bot spot (Buy Low / Sell High, petit capital). Un signal d'ACHAT vient d'être détecté et confirmé par les règles RSI. Ton rôle : le CONFIRMER ou le REJETER selon le contexte technique. Sois conservateur : en cas de doute, REJETTE. Tu ne peux PAS modifier les montants ni la stratégie. Réponds UNIQUEMENT en JSON strict: {"decision":"CONFIRM"|"REJECT","confidence":0-100,"reason":"explication courte en français"}`,
+        messages: [{ role: 'user', content: `Signal ACHAT détecté et confirmé:
 - Marché: ${bot.symbol} (${bot.name})
 - Prix actuel: $${ctx.price}
-- RSI(14): ${ctx.rsi} (seuil achat: <${bot.rsi_buy})
+- RSI(14): ${ctx.rsi} (seuil achat: <${bot.rsi_buy}, en train de remonter depuis ${ctx.rsiPrev})
 - EMA9: ${ctx.e9.toFixed(2)} | EMA21: ${ctx.e21.toFixed(2)} (tendance: ${ctx.e9 > ctx.e21 ? 'haussière' : 'baissière'})
 - Variation 24h approximative: ${ctx.chg24h}%
 - 5 dernières clôtures: ${ctx.lastCloses.join(', ')}
@@ -144,19 +155,39 @@ async function runBot(bot) {
     const e9      = ema(candles, 9);
     const e21     = ema(candles, 21);
     const pos     = positions.get(bot.id);
-    console.log(`\n📊 ${bot.name} | $${price} | RSI:${r} | EMA9:${e9.toFixed(2)} | EMA21:${e21.toFixed(2)}`);
+
+    // ── suivi de l'historique RSI pour détecter un rebond ──
+    const state = getSignalState(bot.id);
+    state.rsiHistory.push(r);
+    if (state.rsiHistory.length > 5) state.rsiHistory.shift();
+    const rsiPrev = state.rsiHistory.length >= 2
+      ? state.rsiHistory[state.rsiHistory.length - 2]
+      : r;
+    const rsiRebondit = r > rsiPrev; // le RSI remonte = la survente s'essouffle
+
+    console.log(`\n📊 ${bot.name} | $${price} | RSI:${r} (préc. ${rsiPrev}) | EMA9:${e9.toFixed(2)} | EMA21:${e21.toFixed(2)}`);
 
     if (pos) {
       const pct = (price - pos.price) / pos.price;
       console.log(`📈 Position achetée @ $${pos.price} | PnL: ${(pct*100).toFixed(2)}%`);
-      if (pct >= bot.tp)  { console.log('🎯 Take Profit!'); await sellSpot(bot, price); return; }
-      if (pct <= -bot.sl) { console.log('🛑 Stop Loss!');   await sellSpot(bot, price); return; }
-      if (r > bot.rsi_sell) { console.log(`🔄 RSI haut (${r}) → vente`); await sellSpot(bot, price); return; }
+      if (pct >= bot.tp)  { console.log('🎯 Take Profit!'); await sellSpot(bot, price); state.confirmCount = 0; return; }
+      if (pct <= -bot.sl) { console.log('🛑 Stop Loss!');   await sellSpot(bot, price); state.confirmCount = 0; return; }
+      if (r > bot.rsi_sell) { console.log(`🔄 RSI haut (${r}) → vente`); await sellSpot(bot, price); state.confirmCount = 0; return; }
       return;
     }
 
-    // Achat uniquement quand c'est BAS (RSI bas + tendance qui repart)
-    if (r < bot.rsi_buy && e9 > e21) {
+    // ── Condition de base (inchangée) : RSI bas + tendance qui repart ──
+    const conditionBase = r < bot.rsi_buy && e9 > e21;
+
+    // ── Filtre anti-signal-prématuré : RSI doit remonter, confirmé 2 cycles de suite ──
+    if (conditionBase && rsiRebondit) {
+      state.confirmCount++;
+    } else {
+      state.confirmCount = 0;
+    }
+    console.log(`🔎 Filtre confirmation: base=${conditionBase} | rebond=${rsiRebondit} | confirmations=${state.confirmCount}/2`);
+
+    if (state.confirmCount >= 2) {
       const bal = await getBalance();
       if (bal < bot.capital) { console.log(`⚠️ Solde insuffisant: $${bal.toFixed(2)}`); return; }
 
@@ -166,23 +197,25 @@ async function runBot(bot) {
       const lastCloses = candles.slice(-5).map(c => c.c);
       let verdict;
       if (aiState.enabled) {
-        console.log(`🧠 Signal détecté — consultation de Claude IA...`);
-        verdict = await askClaude(bot, { price, rsi: r, e9, e21, chg24h, lastCloses });
+        console.log(`🧠 Signal confirmé (2/2) — consultation de Claude IA...`);
+        verdict = await askClaude(bot, { price, rsi: r, rsiPrev, e9, e21, chg24h, lastCloses });
       } else {
         console.log(`⏸ Validation IA en pause — règles RSI seules`);
-        verdict = { decision: 'CONFIRM', reason: 'Validation IA en pause — signal RSI appliqué directement' };
+        verdict = { decision: 'CONFIRM', reason: 'Validation IA en pause — signal RSI confirmé appliqué directement' };
       }
       console.log(`🧠 Claude: ${verdict.decision}${verdict.confidence ? ' (' + verdict.confidence + '%)' : ''} — ${verdict.reason}`);
       lastVerdicts.set(bot.id, { ...verdict, at: new Date().toISOString(), price, rsi: r });
       if (verdict.decision === 'REJECT') {
         console.log(`🛑 Entrée rejetée par l'IA — le bot attend un meilleur signal`);
+        state.confirmCount = 0;
         return;
       }
 
       const o = await buySpot(bot, price);
       if (o) positions.set(bot.id, { ...o, openedAt: new Date(), aiReason: verdict.reason });
+      state.confirmCount = 0;
     } else {
-      console.log(`⏳ Pas de signal d'achat (RSI=${r}, cible <${bot.rsi_buy})`);
+      console.log(`⏳ Pas de signal confirmé (RSI=${r}, cible <${bot.rsi_buy})`);
     }
   } catch (e) {
     console.error(`❌ ${bot.name}:`, e.message);
@@ -209,4 +242,4 @@ async function startTradingEngine() {
   setInterval(cycle, 15 * 60 * 1000);
 }
 
-module.exports = { startTradingEngine, BOTS, positions, api, getBalance, getPrice, lastVerdicts, aiState };
+module.exports = { startTradingEngine, BOTS, positions, api, getBalance, getPrice, lastVerdicts, aiState, signalState };
