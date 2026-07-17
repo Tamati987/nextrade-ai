@@ -25,6 +25,13 @@ function savePositions() {
   }
 }
 
+// ── POSITIONS RÉELLES EXISTANTES (à réinjecter une seule fois, si aucun fichier n'existe encore) ──
+// Source: Bybit → Journal des transactions (vérifié le 17/07/2026)
+const SEED_POSITIONS = {
+  eth:  { orderId: 'seed-manual-import', price: 1879.77, qty: 0.00371628, side: 'buy', openedAt: '2026-07-14T23:42:56.000Z', aiReason: 'Position réelle réinjectée manuellement (achat du 14/07)' },
+  gold: { orderId: 'seed-manual-import', price: 4057.80, qty: 0.001718,   side: 'buy', openedAt: '2026-07-15T11:57:54.000Z', aiReason: 'Position réelle réinjectée manuellement (achat du 15/07)' },
+};
+
 function loadPositions() {
   try {
     if (fs.existsSync(POSITIONS_FILE)) {
@@ -32,7 +39,10 @@ function loadPositions() {
       for (const [id, pos] of Object.entries(obj)) positions.set(id, pos);
       console.log(`📂 ${positions.size} position(s) restaurée(s) depuis ${POSITIONS_FILE}`);
     } else {
-      console.log(`📂 Aucun fichier de positions trouvé (${POSITIONS_FILE}) — départ à zéro`);
+      console.log(`📂 Aucun fichier de positions trouvé (${POSITIONS_FILE}) — réinjection des positions réelles connues`);
+      for (const [id, pos] of Object.entries(SEED_POSITIONS)) positions.set(id, pos);
+      savePositions();
+      console.log(`🌱 ${positions.size} position(s) réinjectée(s) depuis SEED_POSITIONS et sauvegardée(s)`);
     }
   } catch (e) {
     console.error('⚠️ Échec chargement positions:', e.message);
