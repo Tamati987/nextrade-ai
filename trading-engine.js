@@ -5,11 +5,39 @@
 // ═══════════════════════════════════════════════════════
 const crypto = require('crypto');
 const fetch = require('node-fetch');
+const fs = require('fs');
 require('dotenv').config();
 
 const BYBIT_API  = 'https://api.bybit.com';
 const API_KEY    = process.env.BYBIT_API_KEY;
 const API_SECRET = process.env.BYBIT_SECRET;
+
+// ── PERSISTANCE DES POSITIONS (survit aux redéploiements via Volume Railway) ──
+const DATA_DIR = process.env.RAILWAY_VOLUME_MOUNT_PATH || '.'; // fallback local si pas de volume
+const POSITIONS_FILE = `${DATA_DIR}/positions.json`;
+
+function savePositions() {
+  try {
+    const obj = Object.fromEntries(positions);
+    fs.writeFileSync(POSITIONS_FILE, JSON.stringify(obj, null, 2));
+  } catch (e) {
+    console.error('⚠️ Échec sauvegarde positions:', e.message);
+  }
+}
+
+function loadPositions() {
+  try {
+    if (fs.existsSync(POSITIONS_FILE)) {
+      const obj = JSON.parse(fs.readFileSync(POSITIONS_FILE, 'utf8'));
+      for (const [id, pos] of Object.entries(obj)) positions.set(id, pos);
+      console.log(`📂 ${positions.size} position(s) restaurée(s) depuis ${POSITIONS_FILE}`);
+    } else {
+      console.log(`📂 Aucun fichier de positions trouvé (${POSITIONS_FILE}) — départ à zéro`);
+    }
+  } catch (e) {
+    console.error('⚠️ Échec chargement positions:', e.message);
+  }
+}
 
 // SPOT uniquement : achat bas → vente haute (pas de short, pas de levier)
 // Capital adapté à ~22 USDT au total
@@ -157,6 +185,7 @@ async function sellSpot(bot, price) {
   const pnl = (price - pos.price) * pos.qty;
   console.log(`💰 ${bot.name} vendu | PnL: ${pnl>=0?'+':''}$${pnl.toFixed(2)}`);
   positions.delete(bot.id);
+  savePositions();
   return pnl;
 }
 
@@ -226,7 +255,7 @@ async function runBot(bot) {
       }
 
       const o = await buySpot(bot, price);
-      if (o) positions.set(bot.id, { ...o, openedAt: new Date(), aiReason: verdict.reason });
+      if (o) { positions.set(bot.id, { ...o, openedAt: new Date(), aiReason: verdict.reason }); savePositions(); }
       console.log(`⏱️ Temps total signal → exécution: ${Date.now() - tSignal}ms`);
       state.confirmCount = 0;
     } else {
@@ -239,6 +268,7 @@ async function runBot(bot) {
 
 async function startTradingEngine() {
   console.log('\n🚀 NexTrade AI — Moteur SPOT Bybit démarré (Buy Low / Sell High)');
+  loadPositions(); // ── restaure les positions ouvertes avant précédent redéploiement ──
   try {
     const bal = await getBalance();
     console.log(`💰 Solde Bybit: $${bal.toFixed(2)} USDT`);
