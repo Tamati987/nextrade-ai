@@ -98,6 +98,13 @@ async function getBalance() {
   return +(usdt?.walletBalance || 0);
 }
 
+async function getCoinBalance(coin) {
+  const d = await api('GET', '/v5/account/wallet-balance', { accountType:'UNIFIED' });
+  if (d.retCode !== 0) throw new Error(d.retMsg);
+  const c = d.result.list[0]?.coin?.find(x => x.coin === coin);
+  return +(c?.walletBalance || 0);
+}
+
 // ── VALIDATION IA CLAUDE (appelée uniquement sur signal d'achat confirmé) ──
 const CLAUDE_TIMEOUT_MS = 8000; // sécurité: ne jamais bloquer un cycle plus de 8s sur l'IA
 
@@ -176,13 +183,29 @@ async function buySpot(bot, price) {
 async function sellSpot(bot, price) {
   const pos = positions.get(bot.id);
   if (!pos) return;
-  console.log(`\n🔴 ${bot.name} | VENTE ${bot.symbol} @ $${price} | qty ${pos.qty}`);
+
+  // ── Quantité vendable réelle: min(position enregistrée, solde réel du coin), arrondie VERS LE BAS ──
+  // Corrige 2 causes de rejet Bybit: frais prélevés en coin à l'achat (solde réel < qty brute)
+  // et trop de décimales (précision max = qtyDec)
+  const coin = bot.symbol.replace('USDT', '');
+  let avail = pos.qty;
+  try { avail = await getCoinBalance(coin); }
+  catch(e) { console.log(`⚠️ Lecture solde ${coin} impossible (${e.message.slice(0,40)}) — utilisation qty enregistrée`); }
+  const factor = Math.pow(10, bot.qtyDec);
+  const qtyToSell = Math.floor(Math.min(pos.qty, avail) * factor) / factor;
+
+  if (qtyToSell <= 0) {
+    console.error(`❌ ${bot.name}: quantité vendable nulle (enregistrée: ${pos.qty}, solde réel: ${avail})`);
+    return;
+  }
+
+  console.log(`\n🔴 ${bot.name} | VENTE ${bot.symbol} @ $${price} | qty ${qtyToSell} (enregistrée: ${pos.qty}, solde: ${avail})`);
   const d = await api('POST', '/v5/order/create', {
     category:'spot', symbol:bot.symbol, side:'Sell', orderType:'Market',
-    qty: pos.qty.toString(), marketUnit:'baseCoin', timeInForce:'IOC',
+    qty: qtyToSell.toFixed(bot.qtyDec), marketUnit:'baseCoin', timeInForce:'IOC',
   });
   if (d.retCode !== 0) { console.error('❌ Vente échouée:', d.retMsg); return; }
-  const pnl = (price - pos.price) * pos.qty;
+  const pnl = (price - pos.price) * qtyToSell;
   console.log(`💰 ${bot.name} vendu | PnL: ${pnl>=0?'+':''}$${pnl.toFixed(2)}`);
   positions.delete(bot.id);
   savePositions();
