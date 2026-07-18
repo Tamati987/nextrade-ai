@@ -234,10 +234,17 @@ async function runBot(bot) {
 
     if (pos) {
       const pct = (price - pos.price) / pos.price;
+      const ROUND_TRIP_FEES = 0.002; // ~0.1% achat + 0.1% vente
       console.log(`📈 Position achetée @ $${pos.price} | PnL: ${(pct*100).toFixed(2)}%`);
       if (pct >= bot.tp)  { console.log('🎯 Take Profit!'); await sellSpot(bot, price); state.confirmCount = 0; return; }
       if (pct <= -bot.sl) { console.log('🛑 Stop Loss!');   await sellSpot(bot, price); state.confirmCount = 0; return; }
-      if (r > bot.rsi_sell) { console.log(`🔄 RSI haut (${r}) → vente`); await sellSpot(bot, price); state.confirmCount = 0; return; }
+      if (r > bot.rsi_sell) {
+        if (pct > ROUND_TRIP_FEES) {
+          console.log(`🔄 RSI haut (${r}) + profit net ${(pct*100).toFixed(2)}% → vente`);
+          await sellSpot(bot, price); state.confirmCount = 0; return;
+        }
+        console.log(`⏸ RSI haut (${r}) mais PnL ${(pct*100).toFixed(2)}% ≤ frais (+0.2%) — position conservée (sortie: TP ou SL uniquement)`);
+      }
       return;
     }
 
