@@ -12,14 +12,19 @@ const BYBIT_API  = 'https://api.bybit.com';
 const API_KEY    = process.env.BYBIT_API_KEY;
 const API_SECRET = process.env.BYBIT_SECRET;
 
-// ── PERSISTANCE DES POSITIONS (survit aux redéploiements via Volume Railway) ──
+// ── PERSISTANCE (survit aux redéploiements via Volume Railway) ──
 const DATA_DIR = process.env.RAILWAY_VOLUME_MOUNT_PATH || '.'; // fallback local si pas de volume
 const POSITIONS_FILE = `${DATA_DIR}/positions.json`;
+const DECISIONS_FILE = `${DATA_DIR}/decisions.json`;
+const MAX_DECISIONS = 500; // borne la taille du fichier d'historique
+
+if (!process.env.RAILWAY_VOLUME_MOUNT_PATH) {
+  console.warn('⚠️ RAILWAY_VOLUME_MOUNT_PATH non défini — positions.json et decisions.json seront écrits sur le disque éphémère du conteneur et PERDUS au prochain redéploiement. Attachez un Volume Railway et pointez-le vers cette variable.');
+}
 
 function savePositions() {
   try {
-    const obj = Object.fromEntries(positions);
-    fs.writeFileSync(POSITIONS_FILE, JSON.stringify(obj, null, 2));
+    fs.writeFileSync(POSITIONS_FILE, JSON.stringify(Object.fromEntries(positions), null, 2));
   } catch (e) {
     console.error('⚠️ Échec sauvegarde positions:', e.message);
   }
@@ -39,6 +44,61 @@ function loadPositions() {
   }
 }
 
+// ── HISTORIQUE DES DÉCISIONS IA (traçabilité / audit — horodatage UTC non-ambigu) ──
+let decisionHistory = [];
+
+function saveDecisions() {
+  try {
+    fs.writeFileSync(DECISIONS_FILE, JSON.stringify(decisionHistory, null, 2));
+  } catch (e) {
+    console.error('⚠️ Échec sauvegarde décisions:', e.message);
+  }
+}
+
+function loadDecisions() {
+  try {
+    if (fs.existsSync(DECISIONS_FILE)) {
+      decisionHistory = JSON.parse(fs.readFileSync(DECISIONS_FILE, 'utf8'));
+      console.log(`📂 ${decisionHistory.length} décision(s) restaurée(s) depuis ${DECISIONS_FILE}`);
+    }
+  } catch (e) {
+    console.error('⚠️ Échec chargement décisions:', e.message);
+    decisionHistory = [];
+  }
+}
+
+// Enregistre une décision avec TOUT le contexte exact vu par Claude/les règles à cet instant,
+// pour pouvoir l'auditer plus tard sans dépendre de la disponibilité future des bougies Bybit.
+function recordDecision(bot, ctx, verdict) {
+  const entry = {
+    botId: bot.id,
+    botName: bot.name,
+    symbol: bot.symbol,
+    at: new Date().toISOString(), // UTC non-ambigu (ne pas reformater avec le fuseau du navigateur)
+    decision: verdict.decision,
+    confidence: verdict.confidence ?? null,
+    reason: verdict.reason,
+    aiEnabled: aiState.enabled,
+    context: {
+      price: ctx.price,
+      rsi: ctx.rsi,
+      rsiPrev: ctx.rsiPrev,
+      ema9: ctx.e9,
+      ema21: ctx.e21,
+      chg24h: ctx.chg24h,
+      lastCloses: ctx.lastCloses,
+      tp: bot.tp,
+      sl: bot.sl,
+      capital: bot.capital,
+    },
+  };
+  decisionHistory.push(entry);
+  if (decisionHistory.length > MAX_DECISIONS) decisionHistory = decisionHistory.slice(-MAX_DECISIONS);
+  saveDecisions();
+  lastVerdicts.set(bot.id, { decision: verdict.decision, confidence: verdict.confidence, reason: verdict.reason, at: entry.at, price: ctx.price, rsi: ctx.rsi });
+  return entry;
+}
+
 // SPOT uniquement : achat bas → vente haute (pas de short, pas de levier)
 // Capital adapté à ~22 USDT au total
 const BOTS = [
@@ -48,7 +108,7 @@ const BOTS = [
 ];
 
 const positions = new Map();
-const lastVerdicts = new Map(); // dernières décisions IA par bot
+const lastVerdicts = new Map(); // dernier verdict par bot (accès rapide pour le dashboard)
 const aiState = { enabled: true }; // interrupteur validation Claude
 
 // ── ÉTAT DE CONFIRMATION DE SIGNAL (anti-signal-prématuré) ──
@@ -195,7 +255,13 @@ async function sellSpot(bot, price) {
   const qtyToSell = Math.floor(Math.min(pos.qty, avail) * factor) / factor;
 
   if (qtyToSell <= 0) {
-    console.error(`❌ ${bot.name}: quantité vendable nulle (enregistrée: ${pos.qty}, solde réel: ${avail})`);
+    // Solde réel quasi nul alors qu'une position est enregistrée : elle a déjà été
+    // liquidée ailleurs (vente manuelle, précision Bybit...). La garder bloquerait le bot
+    // indéfiniment (plus jamais d'achat possible tant que `pos` existe). On l'efface et on
+    // alerte fort plutôt que de la laisser "fantôme".
+    console.error(`🚨 ${bot.name}: position enregistrée (${pos.qty} ${coin}) mais solde réel quasi nul (${avail}) — position effacée pour débloquer le bot. Vérifiez l'historique Bybit manuellement.`);
+    positions.delete(bot.id);
+    savePositions();
     return;
   }
 
@@ -268,16 +334,17 @@ async function runBot(bot) {
       const first = candles[0].c;
       const chg24h = (((price - first) / first) * 100).toFixed(2);
       const lastCloses = candles.slice(-5).map(c => c.c);
+      const ctx = { price, rsi: r, rsiPrev, e9, e21, chg24h, lastCloses };
       let verdict;
       if (aiState.enabled) {
         console.log(`🧠 Signal confirmé (2/2) — consultation de Claude IA...`);
-        verdict = await askClaude(bot, { price, rsi: r, rsiPrev, e9, e21, chg24h, lastCloses });
+        verdict = await askClaude(bot, ctx);
       } else {
         console.log(`⏸ Validation IA en pause — règles RSI seules`);
         verdict = { decision: 'CONFIRM', reason: 'Validation IA en pause — signal RSI confirmé appliqué directement' };
       }
       console.log(`🧠 Claude: ${verdict.decision}${verdict.confidence ? ' (' + verdict.confidence + '%)' : ''} — ${verdict.reason}`);
-      lastVerdicts.set(bot.id, { ...verdict, at: new Date().toISOString(), price, rsi: r });
+      recordDecision(bot, ctx, verdict);
       if (verdict.decision === 'REJECT') {
         console.log(`🛑 Entrée rejetée par l'IA — le bot attend un meilleur signal | temps total: ${Date.now() - tSignal}ms`);
         state.confirmCount = 0;
@@ -285,7 +352,7 @@ async function runBot(bot) {
       }
 
       const o = await buySpot(bot, price);
-      if (o) { positions.set(bot.id, { ...o, openedAt: new Date(), aiReason: verdict.reason }); savePositions(); }
+      if (o) { positions.set(bot.id, { ...o, openedAt: new Date().toISOString(), aiReason: verdict.reason }); savePositions(); }
       console.log(`⏱️ Temps total signal → exécution: ${Date.now() - tSignal}ms`);
       state.confirmCount = 0;
     } else {
@@ -299,6 +366,7 @@ async function runBot(bot) {
 async function startTradingEngine() {
   console.log('\n🚀 NexTrade AI — Moteur SPOT Bybit démarré (Buy Low / Sell High)');
   loadPositions(); // ── restaure les positions ouvertes avant précédent redéploiement ──
+  loadDecisions(); // ── restaure l'historique des décisions IA (audit) ──
   try {
     const bal = await getBalance();
     console.log(`💰 Solde Bybit: $${bal.toFixed(2)} USDT`);
@@ -317,4 +385,4 @@ async function startTradingEngine() {
   setInterval(cycle, 15 * 60 * 1000);
 }
 
-module.exports = { startTradingEngine, BOTS, positions, api, getBalance, getPrice, lastVerdicts, aiState, signalState };
+module.exports = { startTradingEngine, BOTS, positions, api, getBalance, getPrice, lastVerdicts, aiState, signalState, decisionHistory: () => decisionHistory };
