@@ -314,6 +314,17 @@ app.get('/api/real/verdicts', (req, res) => {
   } catch(e) { res.json({ ok: false, error: e.message }); }
 });
 
+// ── HISTORIQUE COMPLET DES DÉCISIONS IA (audit — contexte exact + horodatage UTC) ──
+app.get('/api/real/verdicts/history', (req, res) => {
+  try {
+    const { decisionHistory, BOTS } = require('./trading-engine');
+    let history = decisionHistory();
+    if (req.query.botId) history = history.filter(d => d.botId === req.query.botId);
+    const limit = Math.min(+req.query.limit || 100, 500);
+    res.json({ ok: true, count: history.length, history: history.slice(-limit).reverse() });
+  } catch(e) { res.json({ ok: false, error: e.message }); }
+});
+
 // ── PAUSE/REPRISE DE LA VALIDATION IA ──
 app.post('/api/real/ai/toggle', requireAdmin, (req, res) => {
   try {
