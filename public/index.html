@@ -1156,12 +1156,15 @@ async function loadRealData() {
         } else {
           vEl.innerHTML = withV.map(v => {
             const ok = v.verdict.decision === 'CONFIRM';
+            // Horodatage en UTC explicite (non-ambigu, ind\u00e9pendant du fuseau du navigateur) \u2014 essentiel pour
+            // pouvoir confronter une d\u00e9cision aux vraies bougies Bybit apr\u00e8s coup.
+            const atUTC = v.verdict.at ? new Date(v.verdict.at).toLocaleString('fr-FR', { timeZone:'UTC', day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit', second:'2-digit' }) + ' UTC' : '';
             return '<div style="background:var(--bg-2);border:1px solid '+(ok?'rgba(0,230,118,.3)':'rgba(255,61,87,.3)')+';border-radius:8px;padding:10px 12px">'
               + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">'
               + '<span style="font-size:13px">\u{1F9E0}</span>'
               + '<strong style="font-size:11px;color:var(--t0)">'+v.name+'</strong>'
               + '<span class="tag '+(ok?'tag-run':'tag-pause')+'" style="'+(ok?'':'background:rgba(255,61,87,.1);color:var(--red);border-color:rgba(255,61,87,.25)')+'">'+(ok?'\u2705 CONFIRM\u00c9':'\u{1F6D1} REJET\u00c9')+(v.verdict.confidence?' \u00b7 '+v.verdict.confidence+'%':'')+'</span>'
-              + '<span style="margin-left:auto;font-size:9px;color:var(--t2);font-family:var(--mono)">'+(v.verdict.at ? new Date(v.verdict.at).toLocaleString('fr-FR') : '')+'</span></div>'
+              + '<span style="margin-left:auto;font-size:9px;color:var(--t2);font-family:var(--mono)" title="Horodatage UTC \u2014 comparable directement aux bougies Bybit">'+atUTC+'</span></div>'
               + '<div style="font-size:11px;color:var(--t1);line-height:1.6;font-style:italic">\u00ab '+v.verdict.reason+' \u00bb</div>'
               + (v.verdict.price ? '<div style="font-size:9px;color:var(--t2);margin-top:4px;font-family:var(--mono)">Prix: $'+v.verdict.price+' \u00b7 RSI: '+v.verdict.rsi+'</div>' : '')
               + '</div>';
