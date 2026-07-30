@@ -85,6 +85,7 @@ function recordDecision(bot, ctx, verdict) {
       rsiPrev: ctx.rsiPrev,
       ema9: ctx.e9,
       ema21: ctx.e21,
+      ema9Rising: ctx.e9Rising,
       chg24h: ctx.chg24h,
       lastCloses: ctx.lastCloses,
       tp: bot.tp,
@@ -186,7 +187,7 @@ async function askClaude(bot, ctx) {
 - Marché: ${bot.symbol} (${bot.name})
 - Prix actuel: $${ctx.price}
 - RSI(14): ${ctx.rsi} (seuil achat: <${bot.rsi_buy}, en train de remonter depuis ${ctx.rsiPrev})
-- EMA9: ${ctx.e9.toFixed(2)} | EMA21: ${ctx.e21.toFixed(2)} (tendance: ${ctx.e9 > ctx.e21 ? 'haussière' : 'baissière'})
+- EMA9: ${ctx.e9.toFixed(2)} | EMA21: ${ctx.e21.toFixed(2)} — le signal ne se base PAS sur un croisement EMA9/EMA21 déjà effectué (${ctx.e9 > ctx.e21 ? 'EMA9 est déjà au-dessus d’EMA21' : 'EMA9 est encore sous EMA21, croisement pas encore effectué'}), mais sur le fait qu’EMA9 est en train de remonter (momentum court terme qui se retourne à la hausse) : c’est normal et voulu que ce signal arrive avant un croisement complet, ne le REJETTE pas pour ce seul motif
 - Variation 24h approximative: ${ctx.chg24h}%
 - 5 dernières clôtures: ${ctx.lastCloses.join(', ')}
 - Capital du trade: $${bot.capital} | TP: +${bot.tp*100}% | SL: -${bot.sl*100}%
@@ -340,7 +341,7 @@ async function runBot(bot) {
       const first = candles[0].c;
       const chg24h = (((price - first) / first) * 100).toFixed(2);
       const lastCloses = candles.slice(-5).map(c => c.c);
-      const ctx = { price, rsi: r, rsiPrev, e9, e21, chg24h, lastCloses };
+      const ctx = { price, rsi: r, rsiPrev, e9, e21, e9Rising, chg24h, lastCloses };
       let verdict;
       if (aiState.enabled) {
         console.log(`🧠 Signal confirmé (2/2) — consultation de Claude IA...`);
