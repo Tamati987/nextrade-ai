@@ -112,11 +112,11 @@ const lastVerdicts = new Map(); // dernier verdict par bot (accès rapide pour l
 const aiState = { enabled: true }; // interrupteur validation Claude
 
 // ── ÉTAT DE CONFIRMATION DE SIGNAL (anti-signal-prématuré) ──
-const signalState = new Map(); // botId -> { rsiHistory: [], confirmCount: 0 }
+const signalState = new Map(); // botId -> { rsiHistory: [], confirmCount: 0, e9Prev: null }
 
 function getSignalState(botId) {
   if (!signalState.has(botId)) {
-    signalState.set(botId, { rsiHistory: [], confirmCount: 0 });
+    signalState.set(botId, { rsiHistory: [], confirmCount: 0, e9Prev: null });
   }
   return signalState.get(botId);
 }
@@ -296,7 +296,13 @@ async function runBot(bot) {
       : r;
     const rsiRebondit = r > rsiPrev; // le RSI remonte = la survente s'essouffle
 
-    console.log(`\n📊 ${bot.name} | $${price} | RSI:${r} (préc. ${rsiPrev}) | EMA9:${e9.toFixed(2)} | EMA21:${e21.toFixed(2)}`);
+    // ── EMA9 en train de remonter (momentum temps réel) plutôt qu'un croisement EMA9>EMA21 déjà
+    // effectué : ce dernier est un signal en retard qui arrive presque toujours après que le RSI
+    // soit déjà repassé au-dessus du seuil d'achat, ce qui empêchait quasiment toute entrée.
+    const e9Rising = state.e9Prev !== null && e9 > state.e9Prev;
+    state.e9Prev = e9;
+
+    console.log(`\n📊 ${bot.name} | $${price} | RSI:${r} (préc. ${rsiPrev}) | EMA9:${e9.toFixed(2)}${e9Rising?' ↑':''} | EMA21:${e21.toFixed(2)}`);
 
     if (pos) {
       const pct = (price - pos.price) / pos.price;
@@ -314,8 +320,8 @@ async function runBot(bot) {
       return;
     }
 
-    // ── Condition de base (inchangée) : RSI bas + tendance qui repart ──
-    const conditionBase = r < bot.rsi_buy && e9 > e21;
+    // ── Condition de base : RSI bas + momentum EMA9 qui repart à la hausse ──
+    const conditionBase = r < bot.rsi_buy && e9Rising;
 
     // ── Filtre anti-signal-prématuré : RSI doit remonter, confirmé 2 cycles de suite ──
     if (conditionBase && rsiRebondit) {
