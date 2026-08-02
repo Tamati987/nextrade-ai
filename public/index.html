@@ -326,7 +326,7 @@ canvas{display:block}
   <nav class="sidebar">
     <div class="s-label">Navigation</div>
     <div class="s-item active" onclick="goTab('dashboard',this)"><span class="ic">📊</span>Dashboard</div>
-    <div class="s-item" onclick="goTab('bots',this)"><span class="ic">🤖</span>Mes Bots<span class="s-badge g">5</span></div>
+    <div class="s-item" onclick="goTab('bots',this)"><span class="ic">🤖</span>Mes Bots<span class="s-badge g">3</span></div>
     <div class="s-item" onclick="goTab('gold',this)"><span class="ic">🥇</span>XAU/USD Bot</div>
     <div class="s-item" onclick="goTab('activity',this)"><span class="ic">⚡</span>Activité<span class="s-badge a">9</span></div>
     <div class="s-item" onclick="window.open('/paper-trading.html','_blank')" style="color:var(--green)"><span class="ic">📈</span>Paper Trading<span class="s-badge g">Live</span></div>
@@ -356,9 +356,9 @@ canvas{display:block}
       <div class="quick-actions">
         <button class="qa-btn" onclick="askQ('Analyse le XAU/USD maintenant : signal, tendance, risques et recommandation pour le bot Gold Sentinel.')">🥇 Analyse Or</button>
         <button class="qa-btn" onclick="askQ('Analyse le marché BTC/USDT maintenant et donne le signal pour le bot Alpha RSI.')">₿ Analyse BTC</button>
-        <button class="qa-btn" onclick="askQ('Évalue le risque global de mon portefeuille avec 5 bots actifs et propose des ajustements.')">⚠️ Risque global</button>
+        <button class="qa-btn" onclick="askQ('Évalue le risque global de mon portefeuille avec 3 bots actifs et propose des ajustements.')">⚠️ Risque global</button>
         <button class="qa-btn" onclick="askQ('Quelles sont les corrélations entre XAU/USD et les cryptos en ce moment ? Comment en profiter ?')">🔗 Corrélations</button>
-        <button class="qa-btn" onclick="askQ('Explique en détail comment fonctionne la stratégie RSI+MACD+DXY du bot Gold Sentinel et comment l\'optimiser.')">📊 Gold Strategy</button>
+        <button class="qa-btn" onclick="askQ('Explique en détail comment fonctionne la stratégie RSI(14)+EMA9 du bot Gold Sentinel et comment l\'optimiser.')">📊 Gold Strategy</button>
         <button class="qa-btn" onclick="askQ('Quand le prix de l\'or monte, comment cela affecte en général le BTC et l\'EUR/USD ?')">💡 Or vs Crypto</button>
       </div>
       <div class="chat-messages" id="chat-messages">
@@ -366,8 +366,8 @@ canvas{display:block}
           <div class="msg-av ai">🧠</div>
           <div>
             <div class="msg-sender ai">Claude · NexTrade AI</div>
-            <div class="msg-bubble">Bonjour ! Je surveille vos <strong>5 bots</strong> en temps réel, dont le nouveau <strong>Gold Sentinel sur XAU/USD</strong> 🥇<br><br>
-            Le marché de l'or est en phase haussière. XAU/USD teste la résistance <strong>$2 380</strong>. Le bot est bien positionné avec son filtre DXY actif.<br><br>
+            <div class="msg-bubble">Bonjour ! Je surveille vos <strong>3 bots</strong> en temps réel : Gold Sentinel (XAUT/USDT), Alpha RSI (BTC/USDT) et Grid ETH (ETH/USDT) 🥇<br><br>
+            Chaque bot attend un signal RSI(14) bas confirmé par le momentum EMA9, avant validation finale par mes soins.<br><br>
             Que souhaitez-vous analyser ?</div>
           </div>
         </div>
@@ -404,7 +404,6 @@ canvas{display:block}
           <div class="sp" onclick="this.classList.toggle('sel')">MACD</div>
           <div class="sp" onclick="this.classList.toggle('sel')">Bollinger</div>
           <div class="sp" onclick="this.classList.toggle('sel')">EMA Cross</div>
-          <div class="sp" onclick="this.classList.toggle('sel')">DXY Filter</div>
           <div class="sp" onclick="this.classList.toggle('sel')">Grid</div>
           <div class="sp" onclick="this.classList.toggle('sel')">DCA</div>
           <div class="sp" onclick="this.classList.toggle('sel')">Momentum</div>
@@ -445,26 +444,6 @@ canvas{display:block}
 const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
   ? 'http://localhost:3000'
   : ''; // Same origin in production
-
-const bots = [
-  {id:1,icon:'🔵',color:'#00D4FF',type:'crypto',name:'Alpha RSI',    desc:'RSI 14 · EMA Cross',   market:'BTC/USDT', strategy:'RSI+EMA',      pnl:'+$1 284',pnlC:'up',trades:142,win:'68%',capital:'$2 000',status:'running'},
-  {id:2,icon:'🟣',color:'#A78BFA',type:'forex', name:'Bollinger FX', desc:'Bollinger 20 · MACD',  market:'EUR/USD',  strategy:'Bollinger+MACD',pnl:'+$512',  pnlC:'up',trades:87, win:'61%',capital:'$1 500',status:'running'},
-  {id:3,icon:'🟡',color:'#FFB300',type:'crypto',name:'Grid ETH',     desc:'Grid Trading · DCA',   market:'ETH/USDT', strategy:'Grid',          pnl:'-$88',   pnlC:'dn',trades:203,win:'54%',capital:'$500',  status:'paused'},
-  {id:4,icon:'🟢',color:'#00E676',type:'forex', name:'Momentum GBP', desc:'Momentum · RSI 21',    market:'GBP/USD',  strategy:'Momentum',      pnl:'+$220',  pnlC:'up',trades:34, win:'71%',capital:'$800',  status:'testing'},
-  {id:5,icon:'🥇',color:'#FFD700',type:'cfd',   name:'Gold Sentinel',desc:'RSI+MACD · DXY Watch', market:'XAU/USD',  strategy:'RSI+MACD+DXY',  pnl:'+$344',  pnlC:'up',trades:58, win:'65%',capital:'$1 200',status:'running'},
-];
-
-const logs = [
-  {type:'gold',text:'<strong>Gold Sentinel</strong> — Achat XAU/USD @ $2 368.50 · Signal RSI 31 + DXY faible',time:'14:38'},
-  {type:'buy', text:'<strong>Alpha RSI</strong> — Achat 0.012 BTC @ $67 420',time:'14:32'},
-  {type:'ai',  text:'<strong>IA Claude</strong> — Or : corrélation DXY inverse confirmée · signal haussier XAU',time:'14:30'},
-  {type:'sell',text:'<strong>Bollinger FX</strong> — Vente EUR/USD @ 1.0850 · +$28',time:'14:28'},
-  {type:'info',text:'<strong>Grid ETH</strong> — Pausé automatiquement (drawdown 3%)',time:'14:15'},
-  {type:'gold',text:'<strong>Gold Sentinel</strong> — TP partiel @ $2 374 · +$44',time:'13:50'},
-  {type:'warn',text:'<strong>Alpha RSI</strong> — Volatilité élevée · exposition réduite',time:'13:44'},
-  {type:'ai',  text:'<strong>IA Claude</strong> — Tensions géopolitiques détectées · XAU/USD surpondéré recommandé',time:'13:30'},
-  {type:'buy', text:'<strong>Momentum GBP</strong> — Achat GBP/USD @ 1.2640',time:'13:20'},
-];
 
 let chatHistory = [];
 let isLoading = false;
@@ -590,33 +569,12 @@ function renderBots(c) {
   });
 }
 
-function botsTable() {
-  return `
-  <div class="tbl-head"><div></div><div>Bot</div><div>Marché</div><div>PnL</div><div>Win%</div><div>Capital</div><div>Statut</div></div>
-  <div class="card-body" style="display:flex;flex-direction:column;gap:7px">
-    ${bots.map(b=>`
-    <div class="bot-row ${b.type==='cfd'?'gold-bot':''}">
-      <div class="b-av" style="background:${b.color}22;border:1px solid ${b.color}44">${b.icon}</div>
-      <div><div class="b-name">${b.name}${b.type==='cfd'?' <span style="font-size:9px;color:var(--gold)">🥇 Or</span>':''}</div><div class="b-desc">${b.desc}</div></div>
-      <div><span class="tag tag-${b.type}">${b.market}</span></div>
-      <div class="pnl ${b.pnlC}">${b.pnl}</div>
-      <div><div class="b-cl">Win Rate</div><div class="b-cv">${b.win}</div></div>
-      <div><div class="b-cl">Capital</div><div class="b-cv">${b.capital}</div></div>
-      <div class="row-actions">
-        <button class="toggle ${b.status==='running'?'on':'off'}" onclick="toggleBot(this,${b.id})"></button>
-        <span class="tag ${b.status==='running'?'tag-run':b.status==='paused'?'tag-pause':'tag-test'}">${b.status==='running'?'Actif':b.status==='paused'?'Pausé':'Test'}</span>
-        <button class="ico-btn ${b.type==='cfd'?'gold-b':'ai-b'}" title="Analyser" onclick="askQ('Analyse en détail le bot ${b.name} sur ${b.market} : signal actuel, performance, risques et recommandations.')">🧠</button>
-      </div>
-    </div>`).join('')}
-  </div>`;
-}
-
 function renderGold(c) {
   c.innerHTML = `
   <div class="gold-card">
     <div class="gold-header"><span style="font-size:20px">🥇</span><div class="gold-title">Gold Sentinel — Bot Or (XAUT/USDT)</div><div class="ai-model-tag" style="margin-left:auto;background:var(--gold-dim);border-color:var(--gold-glow);color:var(--gold)">Spot Bybit · LIVE</div></div>
     <div class="gold-body">
-      Le bot <strong>Gold Sentinel</strong> trade l'or tokenisé (<strong>XAUT</strong> = Tether Gold, adossé à l'or physique) en <strong>spot sur Bybit</strong> : il achète quand le RSI(14) descend sous 38 avec une tendance qui repart (EMA9 > EMA21), puis revend automatiquement à <strong>+2.5%</strong> (Take Profit) ou coupe à <strong>-2%</strong> (Stop Loss).<br><br>
+      Le bot <strong>Gold Sentinel</strong> trade l'or tokenisé (<strong>XAUT</strong> = Tether Gold, adossé à l'or physique) en <strong>spot sur Bybit</strong> : il achète quand le RSI(14) descend sous 38 avec un momentum EMA9 qui repart à la hausse (confirmé sur 2 cycles de 15 min), puis revend automatiquement à <strong>+2.5%</strong> (Take Profit) ou coupe à <strong>-2%</strong> (Stop Loss).<br><br>
       <strong>Buy Low / Sell High</strong> — pas de levier, pas de vente à découvert : le bot n'achète que lors des vraies baisses et attend patiemment sinon.
     </div>
   </div>
@@ -632,7 +590,7 @@ function renderGold(c) {
     <div class="card-header"><div class="card-title">Configuration réelle — Gold Sentinel</div>
     <div class="ch-actions"><button class="btn btn-ghost" onclick="renderGold(document.getElementById('content'))">↺ Actualiser</button></div></div>
     <div class="card-body" style="display:flex;flex-direction:column;gap:9px;font-size:11px" id="g-config">
-      ${[['Marché','XAUT/USDT (Tether Gold — Spot)'],['Stratégie','RSI(14) + EMA9/EMA21'],['Signal achat','RSI < 38 + tendance haussière'],['Signal vente','RSI > 65 · TP +2.5% · SL -2%'],['Timeframe','15 minutes'],['Mode','Spot — sans levier'],['Exchange','Bybit (compte Trading unifié)']].map(([k,v])=>`
+      ${[['Marché','XAUT/USDT (Tether Gold — Spot)'],['Stratégie','RSI(14) + momentum EMA9'],['Signal achat','RSI < 38 + EMA9 en hausse (2 cycles)'],['Signal vente','RSI > 65 · TP +2.5% · SL -2%'],['Timeframe','15 minutes'],['Mode','Spot — sans levier'],['Exchange','Bybit (compte Trading unifié)']].map(([k,v])=>`
       <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border)">
         <span style="color:var(--t2);font-size:10px">${k}</span>
         <span style="color:var(--t0);font-weight:600;font-family:var(--mono);font-size:10px">${v}</span>
@@ -860,16 +818,6 @@ function updateTickers() {
 setInterval(updateTickers, 2000);
 
 // ── TOGGLE BOT ──
-function toggleBot(btn,id) {
-  btn.classList.toggle('on'); btn.classList.toggle('off');
-  const tag=btn.nextElementSibling;
-  const on=btn.classList.contains('on');
-  tag.textContent=on?'Actif':'Pausé';
-  tag.className='tag '+(on?'tag-run':'tag-pause');
-  showToast(on?`✅ Bot #${id} activé`:`⏸️ Bot #${id} mis en pause`);
-  try { fetch(`${API_BASE}/api/bots/${id}/toggle`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({active:on})}); } catch(e){}
-}
-
 // ── MODAL ──
 function openModal(){document.getElementById('modal').classList.add('open')}
 function closeModal(){document.getElementById('modal').classList.remove('open')}
@@ -921,7 +869,7 @@ async function sendMsg() {
 
     if(!reply) {
       // Direct API call (for demo — in production use backend)
-      const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:1000,system:`Tu es un expert en trading algorithmique sur la plateforme NexTrade AI. Tu connais parfaitement les marchés crypto (BTC, ETH), Forex (EUR/USD, GBP/USD) et l'or (XAU/USD CFD). Tu suis 5 bots dont le Gold Sentinel qui trade XAU/USD avec RSI+MACD+DXY. Portefeuille actuel : $5 272 (+41.8%). Réponds en français, de façon concise et experte.`,messages:chatHistory})});
+      const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:1000,system:`Tu es un expert en trading algorithmique sur la plateforme NexTrade AI. Tu connais parfaitement les marchés crypto (BTC, ETH) et l'or tokenisé (XAUT/USDT). Tu suis 3 bots réels sur Bybit (spot, sans levier) : Gold Sentinel (XAUT/USDT), Alpha RSI (BTC/USDT) et Grid ETH (ETH/USDT), tous basés sur RSI(14) + momentum EMA9. Tu n'as pas accès aux données réelles du compte dans ce mode de secours : ne donne aucun chiffre de solde ou de performance, dis-le honnêtement si on te le demande. Réponds en français, de façon concise et experte.`,messages:chatHistory})});
       const d=await r.json(); reply=d.content?.[0]?.text||'Erreur API.';
     }
 
