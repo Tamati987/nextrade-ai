@@ -325,6 +325,23 @@ app.get('/api/real/verdicts/history', (req, res) => {
   } catch(e) { res.json({ ok: false, error: e.message }); }
 });
 
+// ── VALIDATION IA POUR LE PAPER TRADING (réutilise exactement askClaude() du vrai moteur — même prompt, aucune duplication) ──
+app.post('/api/paper/validate', async (req, res) => {
+  try {
+    const { askClaude } = require('./trading-engine');
+    const { symbol, name, rsi_buy, capital, tp, sl, price, rsi, rsiPrev, e9, e21, chg24h, lastCloses } = req.body || {};
+    const nums = { rsi_buy, capital, tp, sl, price, rsi, rsiPrev, e9, e21 };
+    for (const [k, v] of Object.entries(nums)) {
+      if (typeof v !== 'number' || !Number.isFinite(v)) return res.status(400).json({ ok: false, error: `Champ numérique invalide: ${k}` });
+    }
+    if (!symbol || !name || !Array.isArray(lastCloses)) return res.status(400).json({ ok: false, error: 'Champs manquants (symbol, name, lastCloses)' });
+    const bot = { symbol, name, rsi_buy, capital, tp, sl };
+    const ctx = { price, rsi, rsiPrev, e9, e21, chg24h: chg24h ?? '0.00', lastCloses };
+    const verdict = await askClaude(bot, ctx);
+    res.json({ ok: true, verdict });
+  } catch(e) { res.json({ ok: false, error: e.message }); }
+});
+
 // ── PAUSE/REPRISE DE LA VALIDATION IA ──
 app.post('/api/real/ai/toggle', requireAdmin, (req, res) => {
   try {

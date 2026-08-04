@@ -409,4 +409,4 @@ async function startTradingEngine() {
   setInterval(cycle, 15 * 60 * 1000);
 }
 
-module.exports = { startTradingEngine, BOTS, positions, api, getBalance, getPrice, lastVerdicts, aiState, signalState, decisionHistory: () => decisionHistory };
+module.exports = { startTradingEngine, BOTS, positions, api, getBalance, getPrice, lastVerdicts, aiState, signalState, decisionHistory: () => decisionHistory, askClaude };

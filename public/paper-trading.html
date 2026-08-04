@@ -389,6 +389,7 @@ let fetchTimer  = null;
 let priceTimer  = null;
 let rsiValues   = {};
 let lastSignal  = {};
+let autoTimer   = null;
 
 // ── BINANCE API ──
 const BN = 'https://api.binance.com/api/v3';
@@ -481,9 +482,9 @@ function calcEMA(candles, period) {
 
 // ── SEUILS DES 3 VRAIS BOTS (doivent rester identiques à BOTS dans trading-engine.js) ──
 const REAL_BOTS = {
-  'XAUUSDT': { rsi_buy: 38, rsi_sell: 65, tp: 0.025, sl: 0.02 },
-  'BTCUSDT': { rsi_buy: 35, rsi_sell: 68, tp: 0.030, sl: 0.02 },
-  'ETHUSDT': { rsi_buy: 40, rsi_sell: 62, tp: 0.025, sl: 0.02 },
+  'XAUUSDT': { rsi_buy: 38, rsi_sell: 65, tp: 0.025, sl: 0.02, capital: 7 },
+  'BTCUSDT': { rsi_buy: 35, rsi_sell: 68, tp: 0.030, sl: 0.02, capital: 7 },
+  'ETHUSDT': { rsi_buy: 40, rsi_sell: 62, tp: 0.025, sl: 0.02, capital: 7 },
 };
 
 // ── BOT SIGNAL ──
@@ -525,6 +526,8 @@ async function init() {
   buildMarketList();
   await loadMarket(activeMkt);
   startLivePriceFeed();
+  refreshAutoCandles(); // premier chargement immédiat des 3 vrais bots
+  autoTimer = setInterval(refreshAutoCandles, 30000); // détecte les nouveaux cycles 15min
 }
 
 function buildMarketList() {
@@ -581,7 +584,6 @@ function startLivePriceFeed() {
         }
         // Suivi automatique TP/SL/stop suiveur — tourne sur les 3 vrais bots en
         // permanence, même quand ce n'est pas le marché affiché à l'écran
-        updateAutoCandle(mkt.sym, p);
         checkAutoExit(mkt.sym, p);
         updatePositionsPnLForSymbol(mkt.sym, p);
         // Update active market header
@@ -783,7 +785,17 @@ function updateBotPanel() {
   // Signal banner
   const banner = document.getElementById('signal-banner');
   const text   = document.getElementById('signal-text');
-  if (sig.signal !== 'NEUTRE') {
+  const isReal = !!REAL_BOTS[activeMkt.sym];
+  if (isReal) {
+    // Marché 100% automatique : informatif seulement, pas d'invite à cliquer.
+    const cc = getPaperState(activeMkt.sym).confirmCount;
+    const hasPos = positions.some(p => p.sym === activeMkt.sym && p.side === 'buy');
+    banner.classList.add('show');
+    banner.style.borderColor = sig.signal==='ACHAT'?'rgba(0,230,118,.3)':sig.signal==='VENTE'?'rgba(255,61,87,.3)':'rgba(143,168,204,.25)';
+    text.innerHTML = hasPos
+      ? `<strong>${activeMkt.bot}</strong> a une position ouverte — sortie automatique (TP/SL/stop suiveur) en cours de surveillance.`
+      : `<strong>${activeMkt.bot}</strong> — RSI=${sig.rsi} · EMA9 ${sig.ema9Rising?'en hausse':'en baisse'} · confirmation ${cc}/2 cycles. <span style="color:var(--t2)">Entrée 100% automatique, validée par Claude.</span>`;
+  } else if (sig.signal !== 'NEUTRE') {
     banner.classList.add('show');
     banner.style.borderColor = sig.signal==='ACHAT'?'rgba(0,230,118,.3)':'rgba(255,61,87,.3)';
     text.innerHTML = `Le bot <strong>${activeMkt.bot}</strong> détecte un signal <strong style="color:${sig.color}">${sig.signal}</strong> sur ${activeMkt.label}. RSI=${sig.rsi} · EMA9 ${sig.ema9Rising?'en hausse':'en baisse'}. <span style="color:var(--t2)">Cliquez Achat/Vente pour trader.</span>`;
@@ -823,6 +835,10 @@ function updateOrderSummary() {
 }
 
 async function placeOrder() {
+  if (REAL_BOTS[activeMkt.sym]) {
+    showToast(`🤖 ${activeMkt.bot} trade en 100% automatique (entrée, sortie, validation Claude) — pas d'ordre manuel sur ce marché.`);
+    return;
+  }
   const amount = +document.getElementById('order-amount').value || 0;
   const lev = +document.getElementById('lev-range').value || 1;
   if (amount <= 0) { showToast('⚠️ Montant invalide'); return; }
@@ -839,9 +855,7 @@ async function placeOrder() {
   wallet.balance -= amount;
   updateWallet();
   renderPositions();
-  const autoManaged = orderSide === 'buy' && REAL_BOTS[activeMkt.sym];
-  showToast(`${orderSide==='buy'?'▲ Achat':'▼ Vente'} ${activeMkt.label} @ ${formatPrice(price,activeMkt)} · $${amount}${autoManaged?' · TP/SL/stop suiveur automatiques':''}`);
-  if (autoManaged) await ensureAutoCandles(activeMkt.sym);
+  showToast(`${orderSide==='buy'?'▲ Achat':'▼ Vente'} ${activeMkt.label} @ ${formatPrice(price,activeMkt)} · $${amount}`);
 }
 
 function closePosition(posId, reason) {
@@ -861,26 +875,96 @@ function closePosition(posId, reason) {
   showToast(`${reason?reason+' — ':''}Clôture ${pos.label} · PnL: ${pnl>=0?'+':''}$${pnl.toFixed(2)}`);
 }
 
-// ── SORTIE AUTOMATIQUE (TP/SL/stop suiveur) POUR LES 3 VRAIS BOTS ──
-// Réplique exactement la logique de trading-engine.js. Ne gère que les positions "buy" :
-// les vrais bots tradent uniquement en spot, jamais à découvert (pas de short).
-const AUTO_TF = '15m'; // même intervalle que le vrai moteur
-const autoCandles = {}; // sym -> bougies maintenues en direct (uniquement pour les 3 vrais bots)
+// ── AUTOMATISATION COMPLÈTE (entrée ET sortie) POUR LES 3 VRAIS BOTS ──
+// Réplique exactement la logique de trading-engine.js : entrée RSI+EMA9 confirmée sur 2
+// cycles + validation Claude, sortie TP/SL/stop suiveur. Ne gère que le côté "buy" : les
+// vrais bots tradent uniquement en spot, jamais à découvert (pas de short).
+const AUTO_TF = '15m'; // même intervalle que le vrai moteur (un "cycle" = une bougie 15min)
+const autoCandles = {}; // sym -> vraies bougies (rafraîchies périodiquement, pas de simulation locale)
+const paperState = {};  // sym -> { rsiHistory, confirmCount, e9Prev, lastCandleTime } — identique à signalState
 
-async function ensureAutoCandles(sym) {
-  if (autoCandles[sym] || !REAL_BOTS[sym]) return;
-  const mkt = MARKETS.find(m => m.sym === sym);
-  if (!mkt) return;
-  autoCandles[sym] = await fetchCandles(mkt, AUTO_TF);
+function getPaperState(sym) {
+  if (!paperState[sym]) paperState[sym] = { rsiHistory: [], confirmCount: 0, e9Prev: null, lastCandleTime: null };
+  return paperState[sym];
 }
 
-function updateAutoCandle(sym, price) {
-  const arr = autoCandles[sym];
-  if (!arr || !arr.length) return;
-  const last = arr[arr.length-1];
-  last.c = price;
-  last.h = Math.max(last.h, price);
-  last.l = Math.min(last.l, price);
+// Rafraîchit les vraies bougies des 3 marchés réels et déclenche l'évaluation d'entrée
+// dès qu'une nouvelle bougie 15min apparaît (comme le vrai bot, pas à chaque tick de prix).
+async function refreshAutoCandles() {
+  for (const sym of Object.keys(REAL_BOTS)) {
+    const mkt = MARKETS.find(m => m.sym === sym);
+    if (!mkt) continue;
+    try {
+      autoCandles[sym] = await fetchCandles(mkt, AUTO_TF);
+      await checkAutoEntry(sym);
+    } catch(e) { /* on retentera au prochain cycle */ }
+  }
+}
+
+async function checkAutoEntry(sym) {
+  const cfg = REAL_BOTS[sym];
+  const candlesArr = autoCandles[sym];
+  if (!cfg || !candlesArr || candlesArr.length < 22) return;
+  const state = getPaperState(sym);
+
+  const lastT = candlesArr[candlesArr.length-1].t;
+  if (state.lastCandleTime === lastT) return; // même bougie qu'au dernier passage, pas un nouveau cycle
+  state.lastCandleTime = lastT;
+
+  if (positions.some(p => p.sym === sym && p.side === 'buy')) return; // déjà en position (comme le vrai bot)
+
+  const rsi = calcRSI(candlesArr);
+  const e9  = calcEMA(candlesArr, 9);
+  const e9Rising = state.e9Prev !== null && e9 > state.e9Prev;
+  state.e9Prev = e9;
+
+  state.rsiHistory.push(rsi);
+  if (state.rsiHistory.length > 5) state.rsiHistory.shift();
+  const rsiPrev = state.rsiHistory.length >= 2 ? state.rsiHistory[state.rsiHistory.length-2] : rsi;
+  const rsiRebondit = rsi > rsiPrev;
+
+  const conditionBase = rsi < cfg.rsi_buy && e9Rising;
+  state.confirmCount = (conditionBase && rsiRebondit) ? state.confirmCount + 1 : 0;
+  if (state.confirmCount < 2) return;
+  state.confirmCount = 0;
+
+  if (wallet.balance < cfg.capital) return;
+
+  const mkt = MARKETS.find(m => m.sym === sym);
+  const price = livePrice[sym] || candlesArr[candlesArr.length-1].c;
+  const e21 = calcEMA(candlesArr, 21);
+  const first = candlesArr[0].c;
+  const chg24h = (((price - first) / first) * 100).toFixed(2);
+  const lastCloses = candlesArr.slice(-5).map(c => c.c);
+
+  let verdict;
+  try {
+    const r = await fetch('/api/paper/validate', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ symbol: sym, name: mkt.bot, rsi_buy: cfg.rsi_buy, capital: cfg.capital, tp: cfg.tp, sl: cfg.sl, price, rsi, rsiPrev, e9, e21, chg24h, lastCloses })
+    });
+    const d = await r.json();
+    verdict = (d.ok && d.verdict) ? d.verdict : { decision:'CONFIRM', reason: 'IA indisponible côté serveur — règles seules' };
+  } catch(e) {
+    verdict = { decision:'CONFIRM', reason: 'IA injoignable — règles seules' };
+  }
+
+  if (verdict.decision === 'REJECT') {
+    showToast(`🧠 ${mkt.bot} — signal rejeté par Claude : ${verdict.reason}`);
+    return;
+  }
+
+  const qty = cfg.capital / price;
+  const pos = {
+    id: Date.now(), sym, label: mkt.label, side: 'buy', entry: price, qty,
+    amount: cfg.capital, lev: 1, openAt: new Date().toLocaleTimeString('fr-FR'), pnl: 0, mkt,
+    aiReason: verdict.reason,
+  };
+  positions.push(pos);
+  wallet.balance -= cfg.capital;
+  updateWallet();
+  renderPositions();
+  showToast(`🤖 ${mkt.bot} — Achat auto ${mkt.label} @ ${formatPrice(price, mkt)} · Claude: ${verdict.reason}`);
 }
 
 function checkAutoExit(sym, price) {
