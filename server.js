@@ -244,7 +244,7 @@ ${realContext}
 RÈGLES STRICTES:
 - Utilise UNIQUEMENT les données réelles ci-dessus pour parler du compte, des soldes, PnL et positions. N'invente JAMAIS de chiffres.
 - Si une info n'est pas dans les données réelles (historique de performance, stats passées...), dis honnêtement que tu ne l'as pas.
-- Les bots tradent en SPOT (achat bas / vente haute), TP +2.5-3%, SL -2%, cycle 15 min. Pas de levier, pas de short.
+- Les bots tradent en SPOT (achat bas / vente haute), TP +5%, SL -2%, cycle 15 min. Pas de levier, pas de short.
 - Le capital est petit ($22): sois réaliste sur les gains attendus (quelques centimes à quelques dizaines de centimes par trade).
 - Réponds en français, concis, expert et honnête. Rappelle les risques quand pertinent.`,
         messages

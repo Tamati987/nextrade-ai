@@ -482,9 +482,9 @@ function calcEMA(candles, period) {
 
 // ── SEUILS DES 3 VRAIS BOTS (doivent rester identiques à BOTS dans trading-engine.js) ──
 const REAL_BOTS = {
-  'XAUUSDT': { rsi_buy: 38, rsi_sell: 65, tp: 0.025, sl: 0.02, capital: 7, active: true },
-  'BTCUSDT': { rsi_buy: 35, rsi_sell: 68, tp: 0.030, sl: 0.02, capital: 7, active: true },
-  'ETHUSDT': { rsi_buy: 40, rsi_sell: 62, tp: 0.025, sl: 0.02, capital: 7, active: true },
+  'XAUUSDT': { rsi_buy: 38, rsi_sell: 65, tp: 0.05, sl: 0.02, capital: 7, active: true },
+  'BTCUSDT': { rsi_buy: 35, rsi_sell: 68, tp: 0.05, sl: 0.02, capital: 7, active: true },
+  'ETHUSDT': { rsi_buy: 40, rsi_sell: 62, tp: 0.05, sl: 0.02, capital: 7, active: true },
 };
 
 // ── CAPITAL COMPOSÉ (identique au principe de trading-engine.js — en mémoire seulement,
