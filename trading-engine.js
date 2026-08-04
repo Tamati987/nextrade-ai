@@ -307,15 +307,32 @@ async function runBot(bot) {
 
     if (pos) {
       const pct = (price - pos.price) / pos.price;
-      const ROUND_TRIP_FEES = 0.002; // ~0.1% achat + 0.1% vente
+      const ROUND_TRIP_FEES = 0.002;  // ~0.1% achat + 0.1% vente
+      const TRAIL_PULLBACK  = 0.004;  // recul depuis le plus haut qui déclenche la vente une fois le stop suiveur armé
       console.log(`📈 Position achetée @ $${pos.price} | PnL: ${(pct*100).toFixed(2)}%`);
       if (pct >= bot.tp)  { console.log('🎯 Take Profit!'); await sellSpot(bot, price); state.confirmCount = 0; return; }
       if (pct <= -bot.sl) { console.log('🛑 Stop Loss!');   await sellSpot(bot, price); state.confirmCount = 0; return; }
-      if (r > bot.rsi_sell) {
-        if (pct > ROUND_TRIP_FEES) {
-          console.log(`🔄 RSI haut (${r}) + profit net ${(pct*100).toFixed(2)}% → vente`);
+
+      // ── Stop suiveur : au lieu de vendre dès le croisement RSI, on arme un trailing stop
+      // pour laisser courir les gagnants au-delà du simple signal RSI, sans dépasser le TP.
+      if (!pos.trailPeak && r > bot.rsi_sell && pct > ROUND_TRIP_FEES) {
+        pos.trailPeak = price;
+        savePositions();
+        console.log(`📡 RSI haut (${r}) + profit net ${(pct*100).toFixed(2)}% — stop suiveur armé @ $${price}`);
+        return;
+      }
+      if (pos.trailPeak) {
+        if (price > pos.trailPeak) { pos.trailPeak = price; savePositions(); }
+        const pullback = (pos.trailPeak - price) / pos.trailPeak;
+        if (pullback >= TRAIL_PULLBACK) {
+          console.log(`🔄 Stop suiveur déclenché — recul de ${(pullback*100).toFixed(2)}% depuis le plus haut $${pos.trailPeak.toFixed(2)} → vente`);
           await sellSpot(bot, price); state.confirmCount = 0; return;
         }
+        console.log(`📡 Stop suiveur actif — plus haut $${pos.trailPeak.toFixed(2)} | recul ${(pullback*100).toFixed(2)}% (seuil ${(TRAIL_PULLBACK*100).toFixed(1)}%) — position conservée`);
+        return;
+      }
+
+      if (r > bot.rsi_sell) {
         console.log(`⏸ RSI haut (${r}) mais PnL ${(pct*100).toFixed(2)}% ≤ frais (+0.2%) — position conservée (sortie: TP ou SL uniquement)`);
       }
       return;
