@@ -368,7 +368,7 @@ canvas#chart { display:block; }
 
 const MARKETS = [
   { sym:'BTCUSDT',  label:'BTC/USDT',  type:'crypto', icon:'₿',  dec:0,  tickDec:2,  bot:'Alpha RSI',    strat:'RSI+EMA',     color:'#00D4FF' },
-  { sym:'ETHUSDT',  label:'ETH/USDT',  type:'crypto', icon:'Ξ',  dec:0,  tickDec:2,  bot:'Grid ETH',     strat:'Grid Trading',color:'#A78BFA' },
+  { sym:'ETHUSDT',  label:'ETH/USDT',  type:'crypto', icon:'Ξ',  dec:0,  tickDec:2,  bot:'Grid ETH',     strat:'RSI+EMA9',    color:'#A78BFA' },
   { sym:'SOLUSDT',  label:'SOL/USDT',  type:'crypto', icon:'◎',  dec:2,  tickDec:3,  bot:'Sol Momentum', strat:'Momentum',    color:'#9945FF' },
   { sym:'XAUUSDT',  label:'XAU/USD',   type:'gold',   icon:'🥇', dec:2,  tickDec:2,  bot:'Gold Sentinel',strat:'RSI+EMA9',    color:'#FFD700' },
   { sym:'EURUSDT',  label:'EUR/USD',   type:'forex',  icon:'€',  dec:4,  tickDec:4,  bot:'Bollinger FX', strat:'Bollinger+MACD',color:'#FFB300'},
@@ -479,20 +479,33 @@ function calcEMA(candles, period) {
   return ema;
 }
 
+// ── SEUILS DES 3 VRAIS BOTS (doivent rester identiques à BOTS dans trading-engine.js) ──
+const REAL_BOTS = {
+  'XAUUSDT': { rsi_buy: 38, rsi_sell: 65 },
+  'BTCUSDT': { rsi_buy: 35, rsi_sell: 68 },
+  'ETHUSDT': { rsi_buy: 40, rsi_sell: 62 },
+};
+
 // ── BOT SIGNAL ──
 function calcBotSignal(mkt, candles) {
   const rsi = calcRSI(candles);
   const ema9 = calcEMA(candles, 9);
   const ema21 = calcEMA(candles, 21);
+  // EMA9 "en train de remonter" (momentum), comparée à sa valeur sur la bougie précédente —
+  // même logique que le vrai moteur, pas un simple croisement EMA9>EMA21 (signal en retard).
+  const ema9Prev = candles.length > 1 ? calcEMA(candles.slice(0, -1), 9) : ema9;
+  const ema9Rising = ema9 > ema9Prev;
   const lastC = candles[candles.length-1];
   let signal = 'NEUTRE', color = '#8FA8CC';
 
-  if (mkt.strat.includes('RSI')) {
-    if (rsi < 35 && ema9 > ema21) { signal='ACHAT'; color='#00E676'; }
-    else if (rsi > 68 && ema9 < ema21) { signal='VENTE'; color='#FF3D57'; }
-  } else if (mkt.strat.includes('Grid')) {
-    signal = lastC.c < ema21 ? 'ACHAT' : 'VENTE';
-    color = signal==='ACHAT' ? '#00E676' : '#FF3D57';
+  if (REAL_BOTS[mkt.sym]) {
+    // Gold Sentinel, Alpha RSI, Grid ETH : réplique exacte de la logique d'entrée réelle
+    // (trading-engine.js). La sortie réelle utilise en plus un stop suiveur sur position
+    // ouverte, qu'on ne peut pas simuler ici puisque ce simulateur est piloté manuellement
+    // (vous cliquez Achat/Vente vous-même) : "VENTE" reste une approximation simplifiée.
+    const { rsi_buy, rsi_sell } = REAL_BOTS[mkt.sym];
+    if (rsi < rsi_buy && ema9Rising) { signal='ACHAT'; color='#00E676'; }
+    else if (rsi > rsi_sell) { signal='VENTE'; color='#FF3D57'; }
   } else if (mkt.strat.includes('Bollinger')) {
     // Simple mean reversion
     const closes = candles.slice(-20).map(c=>c.c);
@@ -504,7 +517,7 @@ function calcBotSignal(mkt, candles) {
     signal = rsi < 45 ? 'ACHAT' : rsi > 60 ? 'VENTE' : 'NEUTRE';
     color = signal==='ACHAT'?'#00E676':signal==='VENTE'?'#FF3D57':'#8FA8CC';
   }
-  return { signal, rsi, ema9, ema21, trend: ema9>ema21?'Haussière':'Baissière', color };
+  return { signal, rsi, ema9, ema21, ema9Rising, trend: ema9Rising?'Haussière':'Baissière', color };
 }
 
 // ── INIT ──
@@ -767,7 +780,7 @@ function updateBotPanel() {
   if (sig.signal !== 'NEUTRE') {
     banner.classList.add('show');
     banner.style.borderColor = sig.signal==='ACHAT'?'rgba(0,230,118,.3)':'rgba(255,61,87,.3)';
-    text.innerHTML = `Le bot <strong>${activeMkt.bot}</strong> détecte un signal <strong style="color:${sig.color}">${sig.signal}</strong> sur ${activeMkt.label}. RSI=${sig.rsi} · EMA9 ${sig.ema9>sig.ema21?'>':'<'} EMA21. <span style="color:var(--t2)">Cliquez Achat/Vente pour trader.</span>`;
+    text.innerHTML = `Le bot <strong>${activeMkt.bot}</strong> détecte un signal <strong style="color:${sig.color}">${sig.signal}</strong> sur ${activeMkt.label}. RSI=${sig.rsi} · EMA9 ${sig.ema9Rising?'en hausse':'en baisse'}. <span style="color:var(--t2)">Cliquez Achat/Vente pour trader.</span>`;
     if (sig.signal === 'ACHAT') setSide('buy');
     else setSide('sell');
   } else {
