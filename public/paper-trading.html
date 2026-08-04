@@ -482,10 +482,32 @@ function calcEMA(candles, period) {
 
 // ── SEUILS DES 3 VRAIS BOTS (doivent rester identiques à BOTS dans trading-engine.js) ──
 const REAL_BOTS = {
-  'XAUUSDT': { rsi_buy: 38, rsi_sell: 65, tp: 0.025, sl: 0.02, capital: 7 },
-  'BTCUSDT': { rsi_buy: 35, rsi_sell: 68, tp: 0.030, sl: 0.02, capital: 7 },
-  'ETHUSDT': { rsi_buy: 40, rsi_sell: 62, tp: 0.025, sl: 0.02, capital: 7 },
+  'XAUUSDT': { rsi_buy: 38, rsi_sell: 65, tp: 0.025, sl: 0.02, capital: 7, active: true },
+  'BTCUSDT': { rsi_buy: 35, rsi_sell: 68, tp: 0.030, sl: 0.02, capital: 7, active: true },
+  'ETHUSDT': { rsi_buy: 40, rsi_sell: 62, tp: 0.025, sl: 0.02, capital: 7, active: true },
 };
+
+// ── CAPITAL COMPOSÉ (identique au principe de trading-engine.js — en mémoire seulement,
+// ce simulateur ne persiste déjà rien d'autre entre les rechargements de page) ──
+const botEquity = {};
+const CIRCUIT_BREAKER_DRAWDOWN = 0.30;
+
+function getBotEquity(sym) {
+  if (!(sym in botEquity)) botEquity[sym] = REAL_BOTS[sym].capital;
+  return botEquity[sym];
+}
+
+function applyTradePnl(sym, pnl) {
+  const cfg = REAL_BOTS[sym];
+  const newEquity = Math.max(getBotEquity(sym) + pnl, 0.5);
+  botEquity[sym] = newEquity;
+  const floor = cfg.capital * (1 - CIRCUIT_BREAKER_DRAWDOWN);
+  if (newEquity < floor && cfg.active) {
+    cfg.active = false;
+    const mkt = MARKETS.find(m => m.sym === sym);
+    showToast(`🚨 Coupe-circuit — ${mkt?mkt.bot:sym} mis en pause automatiquement (capital $${newEquity.toFixed(2)} < seuil $${floor.toFixed(2)})`);
+  }
+}
 
 // ── BOT SIGNAL ──
 function calcBotSignal(mkt, candles) {
@@ -788,13 +810,20 @@ function updateBotPanel() {
   const isReal = !!REAL_BOTS[activeMkt.sym];
   if (isReal) {
     // Marché 100% automatique : informatif seulement, pas d'invite à cliquer.
+    const cfg = REAL_BOTS[activeMkt.sym];
     const cc = getPaperState(activeMkt.sym).confirmCount;
     const hasPos = positions.some(p => p.sym === activeMkt.sym && p.side === 'buy');
+    const capTxt = `$${getBotEquity(activeMkt.sym).toFixed(2)} (init. $${cfg.capital})`;
     banner.classList.add('show');
-    banner.style.borderColor = sig.signal==='ACHAT'?'rgba(0,230,118,.3)':sig.signal==='VENTE'?'rgba(255,61,87,.3)':'rgba(143,168,204,.25)';
-    text.innerHTML = hasPos
-      ? `<strong>${activeMkt.bot}</strong> a une position ouverte — sortie automatique (TP/SL/stop suiveur) en cours de surveillance.`
-      : `<strong>${activeMkt.bot}</strong> — RSI=${sig.rsi} · EMA9 ${sig.ema9Rising?'en hausse':'en baisse'} · confirmation ${cc}/2 cycles. <span style="color:var(--t2)">Entrée 100% automatique, validée par Claude.</span>`;
+    if (!cfg.active) {
+      banner.style.borderColor = 'rgba(255,61,87,.4)';
+      text.innerHTML = `🚨 <strong>${activeMkt.bot}</strong> en pause — coupe-circuit déclenché (capital composé ${capTxt}).`;
+    } else {
+      banner.style.borderColor = sig.signal==='ACHAT'?'rgba(0,230,118,.3)':sig.signal==='VENTE'?'rgba(255,61,87,.3)':'rgba(143,168,204,.25)';
+      text.innerHTML = hasPos
+        ? `<strong>${activeMkt.bot}</strong> a une position ouverte (${capTxt}) — sortie automatique (TP/SL/stop suiveur) en cours de surveillance.`
+        : `<strong>${activeMkt.bot}</strong> — RSI=${sig.rsi} · EMA9 ${sig.ema9Rising?'en hausse':'en baisse'} · confirmation ${cc}/2 cycles · capital ${capTxt}. <span style="color:var(--t2)">Entrée 100% automatique, validée par Claude.</span>`;
+    }
   } else if (sig.signal !== 'NEUTRE') {
     banner.classList.add('show');
     banner.style.borderColor = sig.signal==='ACHAT'?'rgba(0,230,118,.3)':'rgba(255,61,87,.3)';
@@ -867,6 +896,7 @@ function closePosition(posId, reason) {
     ? (currentPrice - pos.entry) * pos.qty
     : (pos.entry - currentPrice) * pos.qty;
   wallet.balance += pos.amount + pnl;
+  if (REAL_BOTS[pos.sym]) applyTradePnl(pos.sym, pnl); // capital composé + coupe-circuit pour les 3 vrais bots
   trades.push({ ...pos, exit: currentPrice, pnl, closedAt: new Date().toLocaleTimeString('fr-FR') });
   positions.splice(idx, 1);
   updateWallet();
@@ -904,7 +934,7 @@ async function refreshAutoCandles() {
 async function checkAutoEntry(sym) {
   const cfg = REAL_BOTS[sym];
   const candlesArr = autoCandles[sym];
-  if (!cfg || !candlesArr || candlesArr.length < 22) return;
+  if (!cfg || !cfg.active || !candlesArr || candlesArr.length < 22) return; // coupe-circuit : ne rien évaluer si en pause
   const state = getPaperState(sym);
 
   const lastT = candlesArr[candlesArr.length-1].t;
@@ -928,7 +958,8 @@ async function checkAutoEntry(sym) {
   if (state.confirmCount < 2) return;
   state.confirmCount = 0;
 
-  if (wallet.balance < cfg.capital) return;
+  const capital = getBotEquity(sym); // capital composé : grandit/rétrécit avec les trades précédents
+  if (wallet.balance < capital) return;
 
   const mkt = MARKETS.find(m => m.sym === sym);
   const price = livePrice[sym] || candlesArr[candlesArr.length-1].c;
@@ -941,7 +972,7 @@ async function checkAutoEntry(sym) {
   try {
     const r = await fetch('/api/paper/validate', {
       method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ symbol: sym, name: mkt.bot, rsi_buy: cfg.rsi_buy, capital: cfg.capital, tp: cfg.tp, sl: cfg.sl, price, rsi, rsiPrev, e9, e21, chg24h, lastCloses })
+      body: JSON.stringify({ symbol: sym, name: mkt.bot, rsi_buy: cfg.rsi_buy, capital, tp: cfg.tp, sl: cfg.sl, price, rsi, rsiPrev, e9, e21, chg24h, lastCloses })
     });
     const d = await r.json();
     verdict = (d.ok && d.verdict) ? d.verdict : { decision:'CONFIRM', reason: 'IA indisponible côté serveur — règles seules' };
@@ -954,17 +985,17 @@ async function checkAutoEntry(sym) {
     return;
   }
 
-  const qty = cfg.capital / price;
+  const qty = capital / price;
   const pos = {
     id: Date.now(), sym, label: mkt.label, side: 'buy', entry: price, qty,
-    amount: cfg.capital, lev: 1, openAt: new Date().toLocaleTimeString('fr-FR'), pnl: 0, mkt,
+    amount: capital, lev: 1, openAt: new Date().toLocaleTimeString('fr-FR'), pnl: 0, mkt,
     aiReason: verdict.reason,
   };
   positions.push(pos);
-  wallet.balance -= cfg.capital;
+  wallet.balance -= capital;
   updateWallet();
   renderPositions();
-  showToast(`🤖 ${mkt.bot} — Achat auto ${mkt.label} @ ${formatPrice(price, mkt)} · Claude: ${verdict.reason}`);
+  showToast(`🤖 ${mkt.bot} — Achat auto ${mkt.label} @ ${formatPrice(price, mkt)} · $${capital.toFixed(2)} (capital composé) · Claude: ${verdict.reason}`);
 }
 
 function checkAutoExit(sym, price) {

@@ -558,7 +558,7 @@ function renderBots(c) {
       <div class="bot-row ${b.id==='gold'?'gold-bot':''}" style="grid-template-columns:32px 1fr 110px 110px 130px">
         <div class="b-av" style="background:${b.id==='gold'?'#FFD70022':b.id==='btc'?'#00D4FF22':'#A78BFA22'};border:1px solid ${b.id==='gold'?'#FFD70044':b.id==='btc'?'#00D4FF44':'#A78BFA44'}">${b.id==='gold'?'🥇':b.id==='btc'?'₿':'Ξ'}</div>
         <div><div class="b-name">${b.name}</div><div class="b-desc">${b.symbol} · Spot Bybit</div></div>
-        <div><div class="b-cl">Capital</div><div class="b-cv">$${b.capital}</div></div>
+        <div><div class="b-cl">Capital composé</div><div class="b-cv">$${b.capital}<span style="font-size:8px;color:var(--t2)"> (init. $${b.capitalInitial})</span></div></div>
         <div><div class="b-cl">PnL position</div><div class="pnl ${(b.pnl||0)>=0?'up':'dn'}">${b.pnl!==null?((b.pnl>=0?'+':'')+'$'+b.pnl.toFixed(2)):'—'}</div></div>
         <div>${b.position
           ? '<span class="tag tag-run">Position @ $'+b.position.price+'</span>'
@@ -582,7 +582,7 @@ function renderGold(c) {
   <div class="stat-grid" style="grid-template-columns:repeat(4,1fr)">
     <div class="stat-card c-gold"><div class="s-ico">💰</div><div class="s-lbl">Statut</div><div class="s-val" id="g-status" style="color:var(--gold);font-size:14px">…</div><div class="s-chg" id="g-status-sub" style="color:var(--t2)">—</div></div>
     <div class="stat-card c-green"><div class="s-ico">📈</div><div class="s-lbl">PnL Position</div><div class="s-val" id="g-pnl">—</div><div class="s-chg" id="g-pnl-sub" style="color:var(--t2)">—</div></div>
-    <div class="stat-card c-blue"><div class="s-ico">💵</div><div class="s-lbl">Capital alloué</div><div class="s-val" id="g-capital">…</div><div class="s-chg" style="color:var(--t2)">USDT</div></div>
+    <div class="stat-card c-blue"><div class="s-ico">💵</div><div class="s-lbl">Capital composé</div><div class="s-val" id="g-capital">…</div><div class="s-chg" style="color:var(--t2)" id="g-capital-sub">USDT</div></div>
     <div class="stat-card c-purple"><div class="s-ico">🛡️</div><div class="s-lbl">Protection</div><div class="s-val" style="font-size:14px">TP +2.5%</div><div class="s-chg" style="color:var(--red)">SL -2%</div></div>
   </div>
 
@@ -610,6 +610,8 @@ function renderGold(c) {
     const pnlSub = document.getElementById('g-pnl-sub');
     const cap = document.getElementById('g-capital');
     if (cap) cap.textContent = '$' + gold.capital;
+    const capSub = document.getElementById('g-capital-sub');
+    if (capSub) capSub.textContent = 'initial $' + gold.capitalInitial;
     if (gold.position) {
       if (st) st.textContent = 'Position ouverte';
       if (stSub) { stSub.textContent = 'Achat @ $' + gold.position.price; stSub.style.color = 'var(--green)'; }
@@ -623,6 +625,10 @@ function renderGold(c) {
       if (stSub) stSub.textContent = 'Attend RSI < 38 pour acheter';
       if (pnl) pnl.textContent = '$0.00';
       if (pnlSub) pnlSub.textContent = 'Aucune position ouverte';
+    }
+    if (!gold.active) {
+      if (st) { st.textContent = '🚨 En pause'; st.style.color = 'var(--red)'; }
+      if (stSub) { stSub.textContent = 'Coupe-circuit ou pause manuelle — vérifiez les logs'; stSub.style.color = 'var(--red)'; }
     }
   }).catch(()=>{});
 }

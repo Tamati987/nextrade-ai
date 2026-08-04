@@ -211,17 +211,18 @@ app.post('/api/chat', async (req, res) => {
     // Récupérer les VRAIES données du compte pour éviter les hallucinations
     let realContext = 'Données réelles indisponibles pour le moment.';
     try {
-      const { getBalance, getPrice, positions, BOTS } = require('./trading-engine');
+      const { getBalance, getPrice, positions, BOTS, getBotEquity } = require('./trading-engine');
       const balance = await getBalance();
       const lines = [];
       for (const b of BOTS) {
         const pos = positions.get(b.id);
+        const cap = getBotEquity(b).toFixed(2);
         if (pos) {
           let pnl = 0;
           try { const p = await getPrice(b.symbol); pnl = +((p - pos.price) * pos.qty).toFixed(2); } catch(e) {}
-          lines.push(`- ${b.name} (${b.symbol}, spot, capital $${b.capital}): POSITION OUVERTE achetée @ $${pos.price}, PnL actuel: ${pnl>=0?'+':''}$${pnl}`);
+          lines.push(`- ${b.name} (${b.symbol}, spot, capital composé $${cap}, initial $${b.capital}): POSITION OUVERTE achetée @ $${pos.price}, PnL actuel: ${pnl>=0?'+':''}$${pnl}`);
         } else {
-          lines.push(`- ${b.name} (${b.symbol}, spot, capital $${b.capital}): AUCUNE position, en attente d'un signal d'achat (RSI < ${b.rsi_buy})`);
+          lines.push(`- ${b.name} (${b.symbol}, spot, capital composé $${cap}, initial $${b.capital}): AUCUNE position, en attente d'un signal d'achat (RSI < ${b.rsi_buy})`);
         }
       }
       realContext = `Solde réel Bybit: $${balance.toFixed(2)} USDT (compte Trading unifié).
@@ -271,7 +272,7 @@ app.get('/health', (req, res) => res.json({ status: 'ok', users: users.size, sub
 // ── DONNÉES RÉELLES BYBIT ──
 app.get('/api/real/summary', async (req, res) => {
   try {
-    const { getBalance, getPrice, positions, BOTS } = require('./trading-engine');
+    const { getBalance, getPrice, positions, BOTS, getBotEquity } = require('./trading-engine');
     const balance = await getBalance();
     const bots = [];
     for (const b of BOTS) {
@@ -283,7 +284,7 @@ app.get('/api/real/summary', async (req, res) => {
           pnl = +((price - pos.price) * pos.qty).toFixed(2);
         } catch(e) {}
       }
-      bots.push({ id: b.id, name: b.name, symbol: b.symbol, capital: b.capital, active: b.active, position: pos, pnl, rsi_buy: b.rsi_buy, rsi_sell: b.rsi_sell, tp: b.tp, sl: b.sl });
+      bots.push({ id: b.id, name: b.name, symbol: b.symbol, capital: +getBotEquity(b).toFixed(2), capitalInitial: b.capital, active: b.active, position: pos, pnl, rsi_buy: b.rsi_buy, rsi_sell: b.rsi_sell, tp: b.tp, sl: b.sl });
     }
     const admin = isAdmin(req);
     res.json({ ok: true, balance: admin ? +balance.toFixed(2) : null, bots, updatedAt: new Date().toISOString(), admin });

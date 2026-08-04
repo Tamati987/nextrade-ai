@@ -16,7 +16,9 @@ const API_SECRET = process.env.BYBIT_SECRET;
 const DATA_DIR = process.env.RAILWAY_VOLUME_MOUNT_PATH || '.'; // fallback local si pas de volume
 const POSITIONS_FILE = `${DATA_DIR}/positions.json`;
 const DECISIONS_FILE = `${DATA_DIR}/decisions.json`;
+const EQUITY_FILE    = `${DATA_DIR}/equity.json`;
 const MAX_DECISIONS = 500; // borne la taille du fichier d'historique
+const CIRCUIT_BREAKER_DRAWDOWN = 0.30; // pause automatique si le capital composé chute de 30% sous le capital initial
 
 if (!process.env.RAILWAY_VOLUME_MOUNT_PATH) {
   console.warn('⚠️ RAILWAY_VOLUME_MOUNT_PATH non défini — positions.json et decisions.json seront écrits sur le disque éphémère du conteneur et PERDUS au prochain redéploiement. Attachez un Volume Railway et pointez-le vers cette variable.');
@@ -41,6 +43,50 @@ function loadPositions() {
     }
   } catch (e) {
     console.error('⚠️ Échec chargement positions:', e.message);
+  }
+}
+
+// ── CAPITAL COMPOSÉ PAR BOT (grandit avec les gains réalisés, rétrécit avec les pertes) ──
+const botEquity = new Map(); // botId -> capital actuel de ce bot (démarre à bot.capital, évolue avec chaque trade clôturé)
+
+function saveEquity() {
+  try {
+    fs.writeFileSync(EQUITY_FILE, JSON.stringify(Object.fromEntries(botEquity), null, 2));
+  } catch (e) {
+    console.error('⚠️ Échec sauvegarde capital composé:', e.message);
+  }
+}
+
+function loadEquity() {
+  try {
+    if (fs.existsSync(EQUITY_FILE)) {
+      const obj = JSON.parse(fs.readFileSync(EQUITY_FILE, 'utf8'));
+      for (const [id, v] of Object.entries(obj)) botEquity.set(id, v);
+      console.log(`📂 Capital composé restauré depuis ${EQUITY_FILE}`);
+    }
+  } catch (e) {
+    console.error('⚠️ Échec chargement capital composé:', e.message);
+  }
+}
+
+// Renvoie le capital actuel du bot (initialisé à bot.capital si jamais tradé)
+function getBotEquity(bot) {
+  if (!botEquity.has(bot.id)) botEquity.set(bot.id, bot.capital);
+  return botEquity.get(bot.id);
+}
+
+// Met à jour le capital composé après un trade clôturé, et déclenche le coupe-circuit
+// si le capital est tombé sous CIRCUIT_BREAKER_DRAWDOWN du capital initial du bot.
+function applyTradePnl(bot, pnl) {
+  const newEquity = Math.max(getBotEquity(bot) + pnl, 0.5); // garde-fou : jamais en dessous de $0.50
+  botEquity.set(bot.id, newEquity);
+  saveEquity();
+  console.log(`📊 Capital composé ${bot.name}: $${newEquity.toFixed(2)} (${pnl>=0?'+':''}$${pnl.toFixed(2)}, initial $${bot.capital})`);
+
+  const floor = bot.capital * (1 - CIRCUIT_BREAKER_DRAWDOWN);
+  if (newEquity < floor && bot.active) {
+    bot.active = false;
+    console.error(`🚨 COUPE-CIRCUIT: ${bot.name} mis en pause automatiquement — capital composé $${newEquity.toFixed(2)} < seuil $${floor.toFixed(2)} (-${(CIRCUIT_BREAKER_DRAWDOWN*100).toFixed(0)}% du capital initial $${bot.capital}). Réactivez-le manuellement après analyse.`);
   }
 }
 
@@ -90,7 +136,8 @@ function recordDecision(bot, ctx, verdict) {
       lastCloses: ctx.lastCloses,
       tp: bot.tp,
       sl: bot.sl,
-      capital: bot.capital,
+      capital: getBotEquity(bot),
+      capitalInitial: bot.capital,
     },
   };
   decisionHistory.push(entry);
@@ -190,7 +237,7 @@ async function askClaude(bot, ctx) {
 - EMA9: ${ctx.e9.toFixed(2)} | EMA21: ${ctx.e21.toFixed(2)} — le signal ne se base PAS sur un croisement EMA9/EMA21 déjà effectué (${ctx.e9 > ctx.e21 ? 'EMA9 est déjà au-dessus d’EMA21' : 'EMA9 est encore sous EMA21, croisement pas encore effectué'}), mais sur le fait qu’EMA9 est en train de remonter (momentum court terme qui se retourne à la hausse) : c’est normal et voulu que ce signal arrive avant un croisement complet, ne le REJETTE pas pour ce seul motif
 - Variation 24h approximative: ${ctx.chg24h}%
 - 5 dernières clôtures: ${ctx.lastCloses.join(', ')}
-- Capital du trade: $${bot.capital} | TP: +${bot.tp*100}% | SL: -${bot.sl*100}%
+- Capital du trade: $${getBotEquity(bot).toFixed(2)} (capital composé, initial $${bot.capital}) | TP: +${bot.tp*100}% | SL: -${bot.sl*100}%
 Valide ou rejette cette entrée.` }]
       })
     });
@@ -230,15 +277,16 @@ function ema(candles, p) {
 
 // SPOT: on achète en montant USDT (marketUnit quoteCoin), on revend la quantité de coin
 async function buySpot(bot, price) {
-  console.log(`\n🟢 ${bot.name} | ACHAT ${bot.symbol} @ $${price} | ${bot.capital} USDT`);
+  const capital = getBotEquity(bot); // capital composé : grandit/rétrécit avec les trades précédents
+  console.log(`\n🟢 ${bot.name} | ACHAT ${bot.symbol} @ $${price} | ${capital.toFixed(2)} USDT (capital composé, initial $${bot.capital})`);
   const d = await api('POST', '/v5/order/create', {
     category:'spot', symbol:bot.symbol, side:'Buy', orderType:'Market',
-    qty: bot.capital.toFixed(2), marketUnit:'quoteCoin', timeInForce:'IOC',
+    qty: capital.toFixed(2), marketUnit:'quoteCoin', timeInForce:'IOC',
   });
   if (d.retCode !== 0) { console.error('❌ Achat échoué:', d.retMsg); return null; }
-  const qty = +(bot.capital / price).toFixed(bot.qtyDec);
+  const qty = +(capital / price).toFixed(bot.qtyDec);
   console.log('✅ Achat OK:', d.result.orderId, '| ~', qty, bot.symbol.replace('USDT',''));
-  return { orderId:d.result.orderId, price, qty, side:'buy' };
+  return { orderId:d.result.orderId, price, qty, side:'buy', capitalUsed: capital };
 }
 
 async function sellSpot(bot, price) {
@@ -274,6 +322,7 @@ async function sellSpot(bot, price) {
   if (d.retCode !== 0) { console.error('❌ Vente échouée:', d.retMsg); return; }
   const pnl = (price - pos.price) * qtyToSell;
   console.log(`💰 ${bot.name} vendu | PnL: ${pnl>=0?'+':''}$${pnl.toFixed(2)}`);
+  applyTradePnl(bot, pnl);
   positions.delete(bot.id);
   savePositions();
   return pnl;
@@ -352,7 +401,8 @@ async function runBot(bot) {
     if (state.confirmCount >= 2) {
       const tSignal = Date.now(); // ── début du chrono: signal confirmé, avant exécution ──
       const bal = await getBalance();
-      if (bal < bot.capital) { console.log(`⚠️ Solde insuffisant: $${bal.toFixed(2)}`); return; }
+      const capitalNeeded = getBotEquity(bot);
+      if (bal < capitalNeeded) { console.log(`⚠️ Solde insuffisant: $${bal.toFixed(2)} < $${capitalNeeded.toFixed(2)} requis (capital composé)`); return; }
 
       // ── VALIDATION PAR CLAUDE IA ──
       const first = candles[0].c;
@@ -391,6 +441,7 @@ async function startTradingEngine() {
   console.log('\n🚀 NexTrade AI — Moteur SPOT Bybit démarré (Buy Low / Sell High)');
   loadPositions(); // ── restaure les positions ouvertes avant précédent redéploiement ──
   loadDecisions(); // ── restaure l'historique des décisions IA (audit) ──
+  loadEquity();    // ── restaure le capital composé par bot ──
   try {
     const bal = await getBalance();
     console.log(`💰 Solde Bybit: $${bal.toFixed(2)} USDT`);
@@ -409,4 +460,4 @@ async function startTradingEngine() {
   setInterval(cycle, 15 * 60 * 1000);
 }
 
-module.exports = { startTradingEngine, BOTS, positions, api, getBalance, getPrice, lastVerdicts, aiState, signalState, decisionHistory: () => decisionHistory, askClaude };
+module.exports = { startTradingEngine, BOTS, positions, api, getBalance, getPrice, lastVerdicts, aiState, signalState, decisionHistory: () => decisionHistory, askClaude, getBotEquity, CIRCUIT_BREAKER_DRAWDOWN };
