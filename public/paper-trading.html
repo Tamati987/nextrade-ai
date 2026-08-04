@@ -481,9 +481,9 @@ function calcEMA(candles, period) {
 
 // ── SEUILS DES 3 VRAIS BOTS (doivent rester identiques à BOTS dans trading-engine.js) ──
 const REAL_BOTS = {
-  'XAUUSDT': { rsi_buy: 38, rsi_sell: 65 },
-  'BTCUSDT': { rsi_buy: 35, rsi_sell: 68 },
-  'ETHUSDT': { rsi_buy: 40, rsi_sell: 62 },
+  'XAUUSDT': { rsi_buy: 38, rsi_sell: 65, tp: 0.025, sl: 0.02 },
+  'BTCUSDT': { rsi_buy: 35, rsi_sell: 68, tp: 0.030, sl: 0.02 },
+  'ETHUSDT': { rsi_buy: 40, rsi_sell: 62, tp: 0.025, sl: 0.02 },
 };
 
 // ── BOT SIGNAL ──
@@ -579,6 +579,11 @@ function startLivePriceFeed() {
           chgEl.textContent = (chgPct>=0?'+':'')+chgPct+'%';
           chgEl.className = 'mi-chg '+(chgPct>=0?'up':'dn');
         }
+        // Suivi automatique TP/SL/stop suiveur — tourne sur les 3 vrais bots en
+        // permanence, même quand ce n'est pas le marché affiché à l'écran
+        updateAutoCandle(mkt.sym, p);
+        checkAutoExit(mkt.sym, p);
+        updatePositionsPnLForSymbol(mkt.sym, p);
         // Update active market header
         if (mkt.sym === activeMkt.sym) {
           const prev24 = candles.length ? candles[0].o : p;
@@ -594,11 +599,12 @@ function startLivePriceFeed() {
             candles[candles.length-1].l = Math.min(candles[candles.length-1].l, p);
             drawChart();
           }
-          updateOpenPositionsPnL(p);
         }
       }
       await new Promise(r=>setTimeout(r,200)); // stagger requests
     }
+    renderPositions();
+    updateWallet();
     document.getElementById('last-update').textContent = new Date().toLocaleTimeString('fr-FR');
   }, 3000);
 }
@@ -816,7 +822,7 @@ function updateOrderSummary() {
   document.getElementById('amount-hint').textContent = `≈ ${qty.toFixed(activeMkt.dec<=2?4:6)} ${activeMkt.label.split('/')[0]}`;
 }
 
-function placeOrder() {
+async function placeOrder() {
   const amount = +document.getElementById('order-amount').value || 0;
   const lev = +document.getElementById('lev-range').value || 1;
   if (amount <= 0) { showToast('⚠️ Montant invalide'); return; }
@@ -833,10 +839,12 @@ function placeOrder() {
   wallet.balance -= amount;
   updateWallet();
   renderPositions();
-  showToast(`${orderSide==='buy'?'▲ Achat':'▼ Vente'} ${activeMkt.label} @ ${formatPrice(price,activeMkt)} · $${amount}`);
+  const autoManaged = orderSide === 'buy' && REAL_BOTS[activeMkt.sym];
+  showToast(`${orderSide==='buy'?'▲ Achat':'▼ Vente'} ${activeMkt.label} @ ${formatPrice(price,activeMkt)} · $${amount}${autoManaged?' · TP/SL/stop suiveur automatiques':''}`);
+  if (autoManaged) await ensureAutoCandles(activeMkt.sym);
 }
 
-function closePosition(posId) {
+function closePosition(posId, reason) {
   const idx = positions.findIndex(p=>p.id===posId);
   if (idx===-1) return;
   const pos = positions[idx];
@@ -850,18 +858,59 @@ function closePosition(posId) {
   updateWallet();
   renderPositions();
   renderTradeLog();
-  showToast(`Clôture ${pos.label} · PnL: ${pnl>=0?'+':''}$${pnl.toFixed(2)}`);
+  showToast(`${reason?reason+' — ':''}Clôture ${pos.label} · PnL: ${pnl>=0?'+':''}$${pnl.toFixed(2)}`);
 }
 
-function updateOpenPositionsPnL(price) {
+// ── SORTIE AUTOMATIQUE (TP/SL/stop suiveur) POUR LES 3 VRAIS BOTS ──
+// Réplique exactement la logique de trading-engine.js. Ne gère que les positions "buy" :
+// les vrais bots tradent uniquement en spot, jamais à découvert (pas de short).
+const AUTO_TF = '15m'; // même intervalle que le vrai moteur
+const autoCandles = {}; // sym -> bougies maintenues en direct (uniquement pour les 3 vrais bots)
+
+async function ensureAutoCandles(sym) {
+  if (autoCandles[sym] || !REAL_BOTS[sym]) return;
+  const mkt = MARKETS.find(m => m.sym === sym);
+  if (!mkt) return;
+  autoCandles[sym] = await fetchCandles(mkt, AUTO_TF);
+}
+
+function updateAutoCandle(sym, price) {
+  const arr = autoCandles[sym];
+  if (!arr || !arr.length) return;
+  const last = arr[arr.length-1];
+  last.c = price;
+  last.h = Math.max(last.h, price);
+  last.l = Math.min(last.l, price);
+}
+
+function checkAutoExit(sym, price) {
+  const cfg = REAL_BOTS[sym];
+  const candles = autoCandles[sym];
+  if (!cfg || !candles || candles.length < 20) return;
+  const openPositions = positions.filter(p => p.sym === sym && p.side === 'buy');
+  if (!openPositions.length) return;
+  const rsi = calcRSI(candles);
+  const ROUND_TRIP_FEES = 0.002, TRAIL_PULLBACK = 0.004;
+
+  for (const pos of openPositions) {
+    const pct = (price - pos.entry) / pos.entry;
+    if (pct >= cfg.tp)  { closePosition(pos.id, '🎯 Take Profit'); continue; }
+    if (pct <= -cfg.sl) { closePosition(pos.id, '🛑 Stop Loss');   continue; }
+    if (rsi > cfg.rsi_sell && pct > ROUND_TRIP_FEES) {
+      if (!pos.trailPeak || price > pos.trailPeak) pos.trailPeak = price;
+      const pullback = (pos.trailPeak - price) / pos.trailPeak;
+      if (pullback >= TRAIL_PULLBACK) closePosition(pos.id, '🔄 Stop suiveur');
+    }
+  }
+}
+
+function updatePositionsPnLForSymbol(sym, price) {
   positions.forEach(pos => {
-    if (pos.sym !== activeMkt.sym) return;
+    if (pos.sym !== sym) return;
     pos.pnl = pos.side==='buy'
       ? (price - pos.entry) * pos.qty
       : (pos.entry - price) * pos.qty;
   });
-  renderPositions();
-  updateWallet();
 }
 
 function renderPositions() {
