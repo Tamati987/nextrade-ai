@@ -147,6 +147,21 @@ function recordDecision(bot, ctx, verdict) {
   return entry;
 }
 
+// ── FENÊTRES HORAIRES AUTORISÉES POUR DE NOUVELLES ENTRÉES ──
+// Heure de Tahiti (Pacific/Tahiti, UTC-10, pas d'heure d'été) : 04h-07h et 14h-16h.
+// Converti en UTC (Tahiti + 10h) : 14h-17h UTC et 00h-02h UTC.
+// Ne s'applique qu'aux NOUVELLES entrées — les sorties (TP/SL/stop suiveur) restent
+// actives 24h/24 pour ne jamais laisser une position ouverte sans surveillance.
+const TRADING_WINDOWS_UTC = [
+  { start: 14 * 60, end: 17 * 60 }, // 04h-07h Tahiti
+  { start: 0,        end: 2 * 60  }, // 14h-16h Tahiti
+];
+function isInTradingWindow() {
+  const now = new Date();
+  const minutes = now.getUTCHours() * 60 + now.getUTCMinutes();
+  return TRADING_WINDOWS_UTC.some(w => minutes >= w.start && minutes < w.end);
+}
+
 // SPOT uniquement : achat bas → vente haute (pas de short, pas de levier)
 // Capital adapté à ~22 USDT au total
 const BOTS = [
@@ -387,6 +402,14 @@ async function runBot(bot) {
       return;
     }
 
+    // ── Fenêtre horaire autorisée pour une NOUVELLE entrée (la sortie ci-dessus reste
+    // active 24h/24, seule l'ouverture d'une nouvelle position est limitée dans le temps) ──
+    if (!isInTradingWindow()) {
+      console.log(`⏸ ${bot.name} — hors fenêtre de trading (04h-07h / 14h-16h Tahiti) — pas d'évaluation d'entrée`);
+      state.confirmCount = 0;
+      return;
+    }
+
     // ── Condition de base : RSI bas + momentum EMA9 qui repart à la hausse ──
     const conditionBase = r < bot.rsi_buy && e9Rising;
 
@@ -460,4 +483,4 @@ async function startTradingEngine() {
   setInterval(cycle, 15 * 60 * 1000);
 }
 
-module.exports = { startTradingEngine, BOTS, positions, api, getBalance, getPrice, lastVerdicts, aiState, signalState, decisionHistory: () => decisionHistory, askClaude, getBotEquity, CIRCUIT_BREAKER_DRAWDOWN };
+module.exports = { startTradingEngine, BOTS, positions, api, getBalance, getPrice, lastVerdicts, aiState, signalState, decisionHistory: () => decisionHistory, askClaude, getBotEquity, CIRCUIT_BREAKER_DRAWDOWN, isInTradingWindow, TRADING_WINDOWS_UTC };

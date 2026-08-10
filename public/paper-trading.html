@@ -480,6 +480,19 @@ function calcEMA(candles, period) {
   return ema;
 }
 
+// ── FENÊTRES HORAIRES AUTORISÉES POUR DE NOUVELLES ENTRÉES (identique à trading-engine.js) ──
+// Heure de Tahiti (UTC-10, pas d'heure d'été) : 04h-07h et 14h-16h → 14h-17h UTC et 00h-02h UTC.
+// Ne s'applique qu'aux nouvelles entrées — les sorties (TP/SL/stop suiveur) restent actives 24h/24.
+const TRADING_WINDOWS_UTC = [
+  { start: 14 * 60, end: 17 * 60 },
+  { start: 0,        end: 2 * 60  },
+];
+function isInTradingWindow() {
+  const now = new Date();
+  const minutes = now.getUTCHours() * 60 + now.getUTCMinutes();
+  return TRADING_WINDOWS_UTC.some(w => minutes >= w.start && minutes < w.end);
+}
+
 // ── SEUILS DES 3 VRAIS BOTS (doivent rester identiques à BOTS dans trading-engine.js) ──
 const REAL_BOTS = {
   'XAUUSDT': { rsi_buy: 38, rsi_sell: 65, tp: 0.05, sl: 0.02, capital: 7, active: true },
@@ -818,6 +831,9 @@ function updateBotPanel() {
     if (!cfg.active) {
       banner.style.borderColor = 'rgba(255,61,87,.4)';
       text.innerHTML = `🚨 <strong>${activeMkt.bot}</strong> en pause — coupe-circuit déclenché (capital composé ${capTxt}).`;
+    } else if (!hasPos && !isInTradingWindow()) {
+      banner.style.borderColor = 'rgba(143,168,204,.25)';
+      text.innerHTML = `<strong>${activeMkt.bot}</strong> — hors fenêtre de trading. <span style="color:var(--t2)">Nouvelles entrées uniquement 04h-07h et 14h-16h heure de Tahiti (les positions ouvertes restent surveillées 24h/24).</span>`;
     } else {
       banner.style.borderColor = sig.signal==='ACHAT'?'rgba(0,230,118,.3)':sig.signal==='VENTE'?'rgba(255,61,87,.3)':'rgba(143,168,204,.25)';
       text.innerHTML = hasPos
@@ -952,6 +968,8 @@ async function checkAutoEntry(sym) {
   if (state.rsiHistory.length > 5) state.rsiHistory.shift();
   const rsiPrev = state.rsiHistory.length >= 2 ? state.rsiHistory[state.rsiHistory.length-2] : rsi;
   const rsiRebondit = rsi > rsiPrev;
+
+  if (!isInTradingWindow()) { state.confirmCount = 0; return; } // hors fenêtre 04h-07h / 14h-16h Tahiti : pas de nouvelle entrée
 
   const conditionBase = rsi < cfg.rsi_buy && e9Rising;
   state.confirmCount = (conditionBase && rsiRebondit) ? state.confirmCount + 1 : 0;
