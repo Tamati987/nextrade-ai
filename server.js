@@ -226,7 +226,7 @@ app.post('/api/chat', async (req, res) => {
         }
       }
       realContext = `Solde réel Bybit: $${balance.toFixed(2)} USDT (compte Trading unifié).
-Bots réels (3 uniquement, spot Bybit, sans levier):
+Bots réels (${BOTS.length}, spot Bybit, sans levier):
 ${lines.join('\n')}`;
     } catch(e) {}
 
@@ -337,7 +337,7 @@ app.post('/api/paper/validate', async (req, res) => {
     }
     if (!symbol || !name || !Array.isArray(lastCloses)) return res.status(400).json({ ok: false, error: 'Champs manquants (symbol, name, lastCloses)' });
     const bot = { symbol, name, rsi_buy, capital, tp, sl };
-    const ctx = { price, rsi, rsiPrev, e9, e21, chg24h: chg24h ?? '0.00', lastCloses };
+    const ctx = { price, rsi, rsiPrev, e9, e21, chg24h: chg24h ?? '0.00', lastCloses, recentHistory: 'Pas d\'historique disponible (simulateur Paper Trading — pas de mémoire entre les sessions).' };
     const verdict = await askClaude(bot, ctx);
     res.json({ ok: true, verdict });
   } catch(e) { res.json({ ok: false, error: e.message }); }

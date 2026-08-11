@@ -326,7 +326,7 @@ canvas{display:block}
   <nav class="sidebar">
     <div class="s-label">Navigation</div>
     <div class="s-item active" onclick="goTab('dashboard',this)"><span class="ic">📊</span>Dashboard</div>
-    <div class="s-item" onclick="goTab('bots',this)"><span class="ic">🤖</span>Mes Bots<span class="s-badge g">3</span></div>
+    <div class="s-item" onclick="goTab('bots',this)"><span class="ic">🤖</span>Mes Bots<span class="s-badge g">5</span></div>
     <div class="s-item" onclick="goTab('gold',this)"><span class="ic">🥇</span>XAU/USD Bot</div>
     <div class="s-item" onclick="goTab('activity',this)"><span class="ic">⚡</span>Activité<span class="s-badge a">9</span></div>
     <div class="s-item" onclick="window.open('/paper-trading.html','_blank')" style="color:var(--green)"><span class="ic">📈</span>Paper Trading<span class="s-badge g">Live</span></div>
@@ -356,7 +356,7 @@ canvas{display:block}
       <div class="quick-actions">
         <button class="qa-btn" onclick="askQ('Analyse le XAU/USD maintenant : signal, tendance, risques et recommandation pour le bot Gold Sentinel.')">🥇 Analyse Or</button>
         <button class="qa-btn" onclick="askQ('Analyse le marché BTC/USDT maintenant et donne le signal pour le bot Alpha RSI.')">₿ Analyse BTC</button>
-        <button class="qa-btn" onclick="askQ('Évalue le risque global de mon portefeuille avec 3 bots actifs et propose des ajustements.')">⚠️ Risque global</button>
+        <button class="qa-btn" onclick="askQ('Évalue le risque global de mon portefeuille avec 5 bots actifs et propose des ajustements.')">⚠️ Risque global</button>
         <button class="qa-btn" onclick="askQ('Quelles sont les corrélations entre XAU/USD et les cryptos en ce moment ? Comment en profiter ?')">🔗 Corrélations</button>
         <button class="qa-btn" onclick="askQ('Explique en détail comment fonctionne la stratégie RSI(14)+EMA9 du bot Gold Sentinel et comment l\'optimiser.')">📊 Gold Strategy</button>
         <button class="qa-btn" onclick="askQ('Quand le prix de l\'or monte, comment cela affecte en général le BTC et l\'EUR/USD ?')">💡 Or vs Crypto</button>
@@ -366,7 +366,7 @@ canvas{display:block}
           <div class="msg-av ai">🧠</div>
           <div>
             <div class="msg-sender ai">Claude · NexTrade AI</div>
-            <div class="msg-bubble">Bonjour ! Je surveille vos <strong>3 bots</strong> en temps réel : Gold Sentinel (XAUT/USDT), Alpha RSI (BTC/USDT) et Grid ETH (ETH/USDT) 🥇<br><br>
+            <div class="msg-bubble">Bonjour ! Je surveille vos <strong>5 bots</strong> en temps réel : Gold Sentinel (XAUT/USDT), Alpha RSI (BTC/USDT), Grid ETH (ETH/USDT), Sol Momentum (SOL/USDT) et XRP Surge (XRP/USDT) 🥇<br><br>
             Chaque bot attend un signal RSI(14) bas confirmé par le momentum EMA9, avant validation finale par mes soins.<br><br>
             Que souhaitez-vous analyser ?</div>
           </div>
@@ -521,7 +521,7 @@ function renderDashboard(c) {
         <button class="btn btn-ghost" style="justify-content:flex-start;color:var(--green);border-color:rgba(0,230,118,.3)" onclick="window.open('/paper-trading.html','_blank')">\u{1F4C8} Paper Trading \u2014 Simulateur $10 000</button>
         <button class="btn btn-ghost" style="justify-content:flex-start;color:var(--gold);border-color:rgba(255,215,0,.3)" onclick="window.open('/bots-live.html','_blank')">\u{1F56F} Bots Live \u2014 Bougies + RSI + positions</button>
         <button class="btn btn-ghost" style="justify-content:flex-start" onclick="goTab('settings',null)">\u2699\uFE0F Param\u00e8tres \u2014 Pause / activation des bots</button>
-        <button class="btn btn-ai" style="justify-content:flex-start" onclick="askQ('Fais un point complet sur mes 3 bots r\u00e9els (Gold Sentinel XAUT, Alpha RSI BTC, Grid ETH) : conditions de march\u00e9 actuelles et probabilit\u00e9 de signal d achat prochainement.')">\u{1F9E0} Demander un point \u00e0 Claude</button>
+        <button class="btn btn-ai" style="justify-content:flex-start" onclick="askQ('Fais un point complet sur mes 5 bots r\u00e9els (Gold Sentinel XAUT, Alpha RSI BTC, Grid ETH, Sol Momentum SOL, XRP Surge XRP) : conditions de march\u00e9 actuelles et probabilit\u00e9 de signal d achat prochainement.')">\u{1F9E0} Demander un point \u00e0 Claude</button>
       </div>
     </div>
   </div>`;
@@ -875,7 +875,7 @@ async function sendMsg() {
 
     if(!reply) {
       // Direct API call (for demo — in production use backend)
-      const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:1000,system:`Tu es un expert en trading algorithmique sur la plateforme NexTrade AI. Tu connais parfaitement les marchés crypto (BTC, ETH) et l'or tokenisé (XAUT/USDT). Tu suis 3 bots réels sur Bybit (spot, sans levier) : Gold Sentinel (XAUT/USDT), Alpha RSI (BTC/USDT) et Grid ETH (ETH/USDT), tous basés sur RSI(14) + momentum EMA9. Tu n'as pas accès aux données réelles du compte dans ce mode de secours : ne donne aucun chiffre de solde ou de performance, dis-le honnêtement si on te le demande. Réponds en français, de façon concise et experte.`,messages:chatHistory})});
+      const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:1000,system:`Tu es un expert en trading algorithmique sur la plateforme NexTrade AI. Tu connais parfaitement les marchés crypto (BTC, ETH, SOL, XRP) et l'or tokenisé (XAUT/USDT). Tu suis 5 bots réels sur Bybit (spot, sans levier) : Gold Sentinel (XAUT/USDT), Alpha RSI (BTC/USDT), Grid ETH (ETH/USDT), Sol Momentum (SOL/USDT) et XRP Surge (XRP/USDT), tous basés sur RSI(14) + momentum EMA9. Tu n'as pas accès aux données réelles du compte dans ce mode de secours : ne donne aucun chiffre de solde ou de performance, dis-le honnêtement si on te le demande. Réponds en français, de façon concise et experte.`,messages:chatHistory})});
       const d=await r.json(); reply=d.content?.[0]?.text||'Erreur API.';
     }
 

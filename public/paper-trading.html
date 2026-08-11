@@ -369,7 +369,8 @@ canvas#chart { display:block; }
 const MARKETS = [
   { sym:'BTCUSDT',  label:'BTC/USDT',  type:'crypto', icon:'₿',  dec:0,  tickDec:2,  bot:'Alpha RSI',    strat:'RSI+EMA',     color:'#00D4FF' },
   { sym:'ETHUSDT',  label:'ETH/USDT',  type:'crypto', icon:'Ξ',  dec:0,  tickDec:2,  bot:'Grid ETH',     strat:'RSI+EMA9',    color:'#A78BFA' },
-  { sym:'SOLUSDT',  label:'SOL/USDT',  type:'crypto', icon:'◎',  dec:2,  tickDec:3,  bot:'Sol Momentum', strat:'Momentum',    color:'#9945FF' },
+  { sym:'SOLUSDT',  label:'SOL/USDT',  type:'crypto', icon:'◎',  dec:2,  tickDec:3,  bot:'Sol Momentum', strat:'RSI+EMA9',    color:'#9945FF' },
+  { sym:'XRPUSDT',  label:'XRP/USDT',  type:'crypto', icon:'✕',  dec:4,  tickDec:4,  bot:'XRP Surge',    strat:'RSI+EMA9',    color:'#25A768' },
   { sym:'XAUUSDT',  label:'XAU/USD',   type:'gold',   icon:'🥇', dec:2,  tickDec:2,  bot:'Gold Sentinel',strat:'RSI+EMA9',    color:'#FFD700' },
   { sym:'EURUSDT',  label:'EUR/USD',   type:'forex',  icon:'€',  dec:4,  tickDec:4,  bot:'Bollinger FX', strat:'Bollinger+MACD',color:'#FFB300'},
   { sym:'GBPUSDT',  label:'GBP/USD',   type:'forex',  icon:'£',  dec:4,  tickDec:4,  bot:'Momentum GBP', strat:'Momentum',    color:'#00E676' },
@@ -485,6 +486,8 @@ const REAL_BOTS = {
   'XAUUSDT': { rsi_buy: 38, rsi_sell: 65, tp: 0.05, sl: 0.02, capital: 7, active: true },
   'BTCUSDT': { rsi_buy: 35, rsi_sell: 68, tp: 0.05, sl: 0.02, capital: 7, active: true },
   'ETHUSDT': { rsi_buy: 40, rsi_sell: 62, tp: 0.05, sl: 0.02, capital: 7, active: true },
+  'SOLUSDT': { rsi_buy: 35, rsi_sell: 68, tp: 0.05, sl: 0.02, capital: 3, active: true },
+  'XRPUSDT': { rsi_buy: 35, rsi_sell: 68, tp: 0.05, sl: 0.02, capital: 3, active: true },
 };
 
 // ── CAPITAL COMPOSÉ (identique au principe de trading-engine.js — en mémoire seulement,
@@ -548,7 +551,7 @@ async function init() {
   buildMarketList();
   await loadMarket(activeMkt);
   startLivePriceFeed();
-  refreshAutoCandles(); // premier chargement immédiat des 3 vrais bots
+  refreshAutoCandles(); // premier chargement immédiat des 5 vrais bots
   autoTimer = setInterval(refreshAutoCandles, 30000); // détecte les nouveaux cycles 15min
 }
 
@@ -604,7 +607,7 @@ function startLivePriceFeed() {
           chgEl.textContent = (chgPct>=0?'+':'')+chgPct+'%';
           chgEl.className = 'mi-chg '+(chgPct>=0?'up':'dn');
         }
-        // Suivi automatique TP/SL/stop suiveur — tourne sur les 3 vrais bots en
+        // Suivi automatique TP/SL/stop suiveur — tourne sur les 5 vrais bots en
         // permanence, même quand ce n'est pas le marché affiché à l'écran
         checkAutoExit(mkt.sym, p);
         updatePositionsPnLForSymbol(mkt.sym, p);
@@ -822,7 +825,7 @@ function updateBotPanel() {
       banner.style.borderColor = sig.signal==='ACHAT'?'rgba(0,230,118,.3)':sig.signal==='VENTE'?'rgba(255,61,87,.3)':'rgba(143,168,204,.25)';
       text.innerHTML = hasPos
         ? `<strong>${activeMkt.bot}</strong> a une position ouverte (${capTxt}) — sortie automatique (TP/SL/stop suiveur) en cours de surveillance.`
-        : `<strong>${activeMkt.bot}</strong> — RSI=${sig.rsi} · EMA9 ${sig.ema9Rising?'en hausse':'en baisse'} · confirmation ${cc}/2 cycles · capital ${capTxt}. <span style="color:var(--t2)">Entrée 100% automatique, validée par Claude.</span>`;
+        : `<strong>${activeMkt.bot}</strong> — RSI=${sig.rsi} · EMA9 ${sig.ema9Rising?'en hausse':'en baisse'} · confirmation ${cc}/1 cycle · capital ${capTxt}. <span style="color:var(--t2)">Entrée 100% automatique, validée par Claude.</span>`;
     }
   } else if (sig.signal !== 'NEUTRE') {
     banner.classList.add('show');
@@ -896,7 +899,7 @@ function closePosition(posId, reason) {
     ? (currentPrice - pos.entry) * pos.qty
     : (pos.entry - currentPrice) * pos.qty;
   wallet.balance += pos.amount + pnl;
-  if (REAL_BOTS[pos.sym]) applyTradePnl(pos.sym, pnl); // capital composé + coupe-circuit pour les 3 vrais bots
+  if (REAL_BOTS[pos.sym]) applyTradePnl(pos.sym, pnl); // capital composé + coupe-circuit pour les 5 vrais bots
   trades.push({ ...pos, exit: currentPrice, pnl, closedAt: new Date().toLocaleTimeString('fr-FR') });
   positions.splice(idx, 1);
   updateWallet();
@@ -918,7 +921,7 @@ function getPaperState(sym) {
   return paperState[sym];
 }
 
-// Rafraîchit les vraies bougies des 3 marchés réels et déclenche l'évaluation d'entrée
+// Rafraîchit les vraies bougies des 5 marchés réels et déclenche l'évaluation d'entrée
 // dès qu'une nouvelle bougie 15min apparaît (comme le vrai bot, pas à chaque tick de prix).
 async function refreshAutoCandles() {
   for (const sym of Object.keys(REAL_BOTS)) {
@@ -953,9 +956,10 @@ async function checkAutoEntry(sym) {
   const rsiPrev = state.rsiHistory.length >= 2 ? state.rsiHistory[state.rsiHistory.length-2] : rsi;
   const rsiRebondit = rsi > rsiPrev;
 
+  const CONFIRM_CYCLES_REQUIRED = 1; // aligné avec trading-engine.js
   const conditionBase = rsi < cfg.rsi_buy && e9Rising;
   state.confirmCount = (conditionBase && rsiRebondit) ? state.confirmCount + 1 : 0;
-  if (state.confirmCount < 2) return;
+  if (state.confirmCount < CONFIRM_CYCLES_REQUIRED) return;
   state.confirmCount = 0;
 
   const capital = getBotEquity(sym); // capital composé : grandit/rétrécit avec les trades précédents

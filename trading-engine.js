@@ -139,6 +139,7 @@ function recordDecision(bot, ctx, verdict) {
       capital: getBotEquity(bot),
       capitalInitial: bot.capital,
     },
+    outcome: null, // rempli par recordTradeOutcome() une fois le trade clôturé (si CONFIRM)
   };
   decisionHistory.push(entry);
   if (decisionHistory.length > MAX_DECISIONS) decisionHistory = decisionHistory.slice(-MAX_DECISIONS);
@@ -147,12 +148,46 @@ function recordDecision(bot, ctx, verdict) {
   return entry;
 }
 
+// Relie le résultat d'un trade clôturé à la décision CONFIRM qui l'a déclenché, pour que
+// Claude puisse ensuite apprendre de ses décisions passées (pas juste juger dans le vide).
+function recordTradeOutcome(botId, pnl) {
+  for (let i = decisionHistory.length - 1; i >= 0; i--) {
+    const d = decisionHistory[i];
+    if (d.botId === botId && d.decision === 'CONFIRM' && d.outcome == null) {
+      d.outcome = { pnl: +pnl.toFixed(4), closedAt: new Date().toISOString() };
+      saveDecisions();
+      return;
+    }
+  }
+}
+
+// Résume les N dernières décisions de ce bot (avec résultat si connu) pour donner à Claude
+// un vrai historique au lieu de juger chaque signal isolément.
+function getRecentHistorySummary(botId, n = 3) {
+  const recent = decisionHistory.filter(d => d.botId === botId).slice(-n);
+  if (!recent.length) return 'Aucun historique pour ce bot pour le moment.';
+  return recent.map(d => {
+    const when = d.at.slice(0, 16).replace('T', ' ') + ' UTC';
+    let outcomeTxt = '';
+    if (d.decision === 'CONFIRM') {
+      outcomeTxt = d.outcome ? ` → résultat: ${d.outcome.pnl>=0?'+':''}$${d.outcome.pnl.toFixed(2)}` : ' → résultat: position encore ouverte';
+    }
+    return `${when} — ${d.decision} (RSI ${d.context.rsi})${outcomeTxt} — "${d.reason}"`;
+  }).join('\n');
+}
+
 // SPOT uniquement : achat bas → vente haute (pas de short, pas de levier)
 // Capital adapté à ~22 USDT au total
 const BOTS = [
   { id:'gold', name:'Gold Sentinel', symbol:'XAUTUSDT', capital:7, rsi_buy:38, rsi_sell:65, tp:0.05, sl:0.02, active:true, interval:'15', qtyDec:5 },
   { id:'btc',  name:'Alpha RSI',     symbol:'BTCUSDT',  capital:7, rsi_buy:35, rsi_sell:68, tp:0.05, sl:0.02, active:true, interval:'15', qtyDec:6 },
   { id:'eth',  name:'Grid ETH',      symbol:'ETHUSDT',  capital:7, rsi_buy:40, rsi_sell:62, tp:0.05, sl:0.02, active:true, interval:'15', qtyDec:5 },
+  // Nouvelles paires : capital réduit ($3) tant qu'elles n'ont pas fait leurs preuves, et vu le
+  // solde total limité (~22$) partagé entre les 5 bots. qtyDec choisi conservateur (précision
+  // Bybit non vérifiable depuis cet environnement sans accès réseau) — à confirmer sur les
+  // premiers trades réels, ajuster si Bybit rejette une quantité.
+  { id:'sol',  name:'Sol Momentum',  symbol:'SOLUSDT',  capital:3, rsi_buy:35, rsi_sell:68, tp:0.05, sl:0.02, active:true, interval:'15', qtyDec:2 },
+  { id:'xrp',  name:'XRP Surge',     symbol:'XRPUSDT',  capital:3, rsi_buy:35, rsi_sell:68, tp:0.05, sl:0.02, active:true, interval:'15', qtyDec:1 },
 ];
 
 const positions = new Map();
@@ -229,7 +264,7 @@ async function askClaude(bot, ctx) {
       body: JSON.stringify({
         model: 'claude-sonnet-4-6',
         max_tokens: 300,
-        system: `Tu es un validateur de trades pour un bot spot (Buy Low / Sell High, petit capital). Un signal d'ACHAT vient d'être détecté et confirmé par les règles RSI. Ton rôle : le CONFIRMER ou le REJETER selon le contexte technique. Sois conservateur : en cas de doute, REJETTE. Tu ne peux PAS modifier les montants ni la stratégie. Réponds UNIQUEMENT en JSON strict: {"decision":"CONFIRM"|"REJECT","confidence":0-100,"reason":"explication courte en français"}`,
+        system: `Tu es un validateur de trades pour un bot spot (Buy Low / Sell High, petit capital). Un signal d'ACHAT vient d'être détecté et confirmé par les règles RSI. Ton rôle : le CONFIRMER ou le REJETER selon le contexte technique. Sois conservateur : en cas de doute, REJETTE. Tu ne peux PAS modifier les montants ni la stratégie. Utilise l'historique récent de ce bot (fourni ci-dessous) pour repérer des patterns : si tes rejets récents auraient en fait été de bons trades manqués, ou si tes confirmations récentes ont mal tourné, ajuste ton jugement en conséquence plutôt que d'analyser chaque signal isolément. Réponds UNIQUEMENT en JSON strict: {"decision":"CONFIRM"|"REJECT","confidence":0-100,"reason":"explication courte en français"}`,
         messages: [{ role: 'user', content: `Signal ACHAT détecté et confirmé:
 - Marché: ${bot.symbol} (${bot.name})
 - Prix actuel: $${ctx.price}
@@ -238,6 +273,8 @@ async function askClaude(bot, ctx) {
 - Variation 24h approximative: ${ctx.chg24h}%
 - 5 dernières clôtures: ${ctx.lastCloses.join(', ')}
 - Capital du trade: $${getBotEquity(bot).toFixed(2)} (capital composé, initial $${bot.capital}) | TP: +${bot.tp*100}% | SL: -${bot.sl*100}%
+- Historique récent de ce bot (du plus ancien au plus récent) :
+${ctx.recentHistory}
 Valide ou rejette cette entrée.` }]
       })
     });
@@ -323,6 +360,7 @@ async function sellSpot(bot, price) {
   const pnl = (price - pos.price) * qtyToSell;
   console.log(`💰 ${bot.name} vendu | PnL: ${pnl>=0?'+':''}$${pnl.toFixed(2)}`);
   applyTradePnl(bot, pnl);
+  recordTradeOutcome(bot.id, pnl);
   positions.delete(bot.id);
   savePositions();
   return pnl;
@@ -390,15 +428,16 @@ async function runBot(bot) {
     // ── Condition de base : RSI bas + momentum EMA9 qui repart à la hausse ──
     const conditionBase = r < bot.rsi_buy && e9Rising;
 
-    // ── Filtre anti-signal-prématuré : RSI doit remonter, confirmé 2 cycles de suite ──
+    // ── Filtre anti-signal-prématuré : RSI doit remonter, confirmé 1 cycle (plus réactif) ──
+    const CONFIRM_CYCLES_REQUIRED = 1;
     if (conditionBase && rsiRebondit) {
       state.confirmCount++;
     } else {
       state.confirmCount = 0;
     }
-    console.log(`🔎 Filtre confirmation: base=${conditionBase} | rebond=${rsiRebondit} | confirmations=${state.confirmCount}/2`);
+    console.log(`🔎 Filtre confirmation: base=${conditionBase} | rebond=${rsiRebondit} | confirmations=${state.confirmCount}/${CONFIRM_CYCLES_REQUIRED}`);
 
-    if (state.confirmCount >= 2) {
+    if (state.confirmCount >= CONFIRM_CYCLES_REQUIRED) {
       const tSignal = Date.now(); // ── début du chrono: signal confirmé, avant exécution ──
       const bal = await getBalance();
       const capitalNeeded = getBotEquity(bot);
@@ -408,7 +447,8 @@ async function runBot(bot) {
       const first = candles[0].c;
       const chg24h = (((price - first) / first) * 100).toFixed(2);
       const lastCloses = candles.slice(-5).map(c => c.c);
-      const ctx = { price, rsi: r, rsiPrev, e9, e21, e9Rising, chg24h, lastCloses };
+      const recentHistory = getRecentHistorySummary(bot.id);
+      const ctx = { price, rsi: r, rsiPrev, e9, e21, e9Rising, chg24h, lastCloses, recentHistory };
       let verdict;
       if (aiState.enabled) {
         console.log(`🧠 Signal confirmé (2/2) — consultation de Claude IA...`);
