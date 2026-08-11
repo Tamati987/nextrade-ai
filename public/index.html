@@ -490,7 +490,7 @@ function renderDashboard(c) {
     <div class="card-header">
       <span style="font-size:14px">\u{1F7E2}</span>
       <div><div class="card-title" style="color:var(--green)">Compte R\u00e9el Bybit \u2014 Trading Live</div><div class="card-sub" id="real-updated">Chargement...</div></div>
-      <div class="ch-actions"><span class="tag" id="trading-window-badge" style="margin-right:4px">\u2026</span><button class="btn btn-ghost" onclick="loadRealData()">\u21BA Actualiser</button></div>
+      <div class="ch-actions"><button class="btn btn-ghost" onclick="loadRealData()">\u21BA Actualiser</button></div>
     </div>
     <div class="card-body" id="real-body" style="display:flex;flex-direction:column;gap:8px">
       <div style="color:var(--t2);font-size:11px">Connexion au moteur de trading...</div>
@@ -1056,13 +1056,6 @@ async function loadRealData() {
     }
 
     const setTxt = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
-
-    const winBadge = document.getElementById('trading-window-badge');
-    if (winBadge) {
-      winBadge.textContent = sumRes.tradingWindowOpen ? '\u{1F7E2} Fenêtre ouverte' : '\u{1F534} Hors fenêtre (04h-07h / 14h-16h Tahiti)';
-      winBadge.className = 'tag ' + (sumRes.tradingWindowOpen ? 'tag-run' : 'tag-pause');
-      winBadge.title = 'Nouvelles entrées autorisées uniquement 04h-07h et 14h-16h heure de Tahiti — les sorties (TP/SL/stop suiveur) restent actives 24h/24';
-    }
 
     setTxt('real-balance', sumRes.balance !== null ? '$' + sumRes.balance.toFixed(2) : '\u{1F512}');
     const balSub = document.getElementById('real-balance-sub');

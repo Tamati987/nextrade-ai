@@ -272,7 +272,7 @@ app.get('/health', (req, res) => res.json({ status: 'ok', users: users.size, sub
 // ── DONNÉES RÉELLES BYBIT ──
 app.get('/api/real/summary', async (req, res) => {
   try {
-    const { getBalance, getPrice, positions, BOTS, getBotEquity, isInTradingWindow } = require('./trading-engine');
+    const { getBalance, getPrice, positions, BOTS, getBotEquity } = require('./trading-engine');
     const balance = await getBalance();
     const bots = [];
     for (const b of BOTS) {
@@ -287,7 +287,7 @@ app.get('/api/real/summary', async (req, res) => {
       bots.push({ id: b.id, name: b.name, symbol: b.symbol, capital: +getBotEquity(b).toFixed(2), capitalInitial: b.capital, active: b.active, position: pos, pnl, rsi_buy: b.rsi_buy, rsi_sell: b.rsi_sell, tp: b.tp, sl: b.sl });
     }
     const admin = isAdmin(req);
-    res.json({ ok: true, balance: admin ? +balance.toFixed(2) : null, bots, tradingWindowOpen: isInTradingWindow(), updatedAt: new Date().toISOString(), admin });
+    res.json({ ok: true, balance: admin ? +balance.toFixed(2) : null, bots, updatedAt: new Date().toISOString(), admin });
   } catch(e) {
     res.json({ ok: false, error: e.message });
   }
