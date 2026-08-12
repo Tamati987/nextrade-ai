@@ -411,11 +411,19 @@ async function runBot(bot) {
       if (pos.trailPeak) {
         if (price > pos.trailPeak) { pos.trailPeak = price; savePositions(); }
         const pullback = (pos.trailPeak - price) / pos.trailPeak;
-        if (pullback >= TRAIL_PULLBACK) {
-          console.log(`🔄 Stop suiveur déclenché — recul de ${(pullback*100).toFixed(2)}% depuis le plus haut $${pos.trailPeak.toFixed(2)} → vente`);
+        // ── Plancher de rentabilité : une fois le stop suiveur armé, si le prix retombe au
+        // seuil de rentabilité (frais) avant d'avoir reculé de 0.4% depuis le sommet, on vend
+        // quand même immédiatement. Sans ce plancher, un sommet atteint juste au-dessus du seuil
+        // d'armement (0.2%) laissait le recul de 0.4% faire retomber le trade sous le prix d'achat
+        // — une position "protégée" pouvait finir en perte malgré le stop suiveur.
+        if (pullback >= TRAIL_PULLBACK || pct <= ROUND_TRIP_FEES) {
+          const reason = pullback >= TRAIL_PULLBACK
+            ? `recul de ${(pullback*100).toFixed(2)}% depuis le plus haut $${pos.trailPeak.toFixed(2)}`
+            : `retombé au plancher de rentabilité (PnL ${(pct*100).toFixed(2)}% ≤ frais ${(ROUND_TRIP_FEES*100).toFixed(1)}%)`;
+          console.log(`🔄 Stop suiveur déclenché — ${reason} → vente`);
           await sellSpot(bot, price); state.confirmCount = 0; return;
         }
-        console.log(`📡 Stop suiveur actif — plus haut $${pos.trailPeak.toFixed(2)} | recul ${(pullback*100).toFixed(2)}% (seuil ${(TRAIL_PULLBACK*100).toFixed(1)}%) — position conservée`);
+        console.log(`📡 Stop suiveur actif — plus haut $${pos.trailPeak.toFixed(2)} | recul ${(pullback*100).toFixed(2)}% (seuil ${(TRAIL_PULLBACK*100).toFixed(1)}%) | PnL ${(pct*100).toFixed(2)}% (plancher ${(ROUND_TRIP_FEES*100).toFixed(1)}%) — position conservée`);
         return;
       }
 

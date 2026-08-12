@@ -1015,10 +1015,23 @@ function checkAutoExit(sym, price) {
     const pct = (price - pos.entry) / pos.entry;
     if (pct >= cfg.tp)  { closePosition(pos.id, '🎯 Take Profit'); continue; }
     if (pct <= -cfg.sl) { closePosition(pos.id, '🛑 Stop Loss');   continue; }
-    if (rsi > cfg.rsi_sell && pct > ROUND_TRIP_FEES) {
-      if (!pos.trailPeak || price > pos.trailPeak) pos.trailPeak = price;
+
+    // ── Armement (une seule fois) ──
+    if (!pos.trailPeak && rsi > cfg.rsi_sell && pct > ROUND_TRIP_FEES) {
+      pos.trailPeak = price;
+      continue;
+    }
+    // ── Une fois armé, on revérifie à CHAQUE cycle, peu importe le RSI/PnL courant — sinon
+    // le plancher de rentabilité ci-dessous ne pourrait jamais se déclencher (identique à
+    // trading-engine.js) ──
+    if (pos.trailPeak) {
+      if (price > pos.trailPeak) pos.trailPeak = price;
       const pullback = (pos.trailPeak - price) / pos.trailPeak;
-      if (pullback >= TRAIL_PULLBACK) closePosition(pos.id, '🔄 Stop suiveur');
+      // Plancher de rentabilité : si le prix retombe au seuil des frais avant le recul de 0.4%
+      // depuis le sommet, on vend quand même — évite qu'une position "protégée" finisse en perte.
+      if (pullback >= TRAIL_PULLBACK || pct <= ROUND_TRIP_FEES) {
+        closePosition(pos.id, pullback >= TRAIL_PULLBACK ? '🔄 Stop suiveur' : '🔄 Stop suiveur (plancher rentabilité)');
+      }
     }
   }
 }
