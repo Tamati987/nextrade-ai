@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════
 //   NEXTRADE AI — MOTEUR DE TRADING BYBIT (SPOT)
 //   Buy Low / Sell High — adapté petit capital
-//   + Filtre anti-signal-prématuré (RSI rebond + confirmation 2 cycles)
+//   + Filtre anti-signal-prématuré (RSI rebond + confirmation 1 cycle)
 // ═══════════════════════════════════════════════════════
 const crypto = require('crypto');
 const fetch = require('node-fetch');

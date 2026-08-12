@@ -574,7 +574,7 @@ function renderGold(c) {
   <div class="gold-card">
     <div class="gold-header"><span style="font-size:20px">🥇</span><div class="gold-title">Gold Sentinel — Bot Or (XAUT/USDT)</div><div class="ai-model-tag" style="margin-left:auto;background:var(--gold-dim);border-color:var(--gold-glow);color:var(--gold)">Spot Bybit · LIVE</div></div>
     <div class="gold-body">
-      Le bot <strong>Gold Sentinel</strong> trade l'or tokenisé (<strong>XAUT</strong> = Tether Gold, adossé à l'or physique) en <strong>spot sur Bybit</strong> : il achète quand le RSI(14) descend sous 38 avec un momentum EMA9 qui repart à la hausse (confirmé sur 2 cycles de 15 min). Il coupe systématiquement à <strong>-2%</strong> (Stop Loss) ou à <strong>+5%</strong> (Take Profit), et entre les deux, un <strong>stop suiveur</strong> laisse courir les gains dès que le RSI repasse haut, au lieu de vendre immédiatement.<br><br>
+      Le bot <strong>Gold Sentinel</strong> trade l'or tokenisé (<strong>XAUT</strong> = Tether Gold, adossé à l'or physique) en <strong>spot sur Bybit</strong> : il achète quand le RSI(14) descend sous 38 avec un momentum EMA9 qui repart à la hausse (confirmé sur 1 cycle de 15 min). Il coupe systématiquement à <strong>-2%</strong> (Stop Loss) ou à <strong>+5%</strong> (Take Profit), et entre les deux, un <strong>stop suiveur</strong> laisse courir les gains dès que le RSI repasse haut (avec un plancher de rentabilité, pour ne jamais finir en perte une fois armé), au lieu de vendre immédiatement.<br><br>
       <strong>Buy Low / Sell High</strong> — pas de levier, pas de vente à découvert : le bot n'achète que lors des vraies baisses et attend patiemment sinon.
     </div>
   </div>
@@ -590,7 +590,7 @@ function renderGold(c) {
     <div class="card-header"><div class="card-title">Configuration réelle — Gold Sentinel</div>
     <div class="ch-actions"><button class="btn btn-ghost" onclick="renderGold(document.getElementById('content'))">↺ Actualiser</button></div></div>
     <div class="card-body" style="display:flex;flex-direction:column;gap:9px;font-size:11px" id="g-config">
-      ${[['Marché','XAUT/USDT (Tether Gold — Spot)'],['Stratégie','RSI(14) + momentum EMA9'],['Signal achat','RSI < 38 + EMA9 en hausse (2 cycles)'],['Signal vente','RSI > 65 (stop suiveur) · TP +5% · SL -2%'],['Timeframe','15 minutes'],['Mode','Spot — sans levier'],['Exchange','Bybit (compte Trading unifié)']].map(([k,v])=>`
+      ${[['Marché','XAUT/USDT (Tether Gold — Spot)'],['Stratégie','RSI(14) + momentum EMA9'],['Signal achat','RSI < 38 + EMA9 en hausse (1 cycle)'],['Signal vente','RSI > 65 (stop suiveur) · TP +5% · SL -2%'],['Timeframe','15 minutes'],['Mode','Spot — sans levier'],['Exchange','Bybit (compte Trading unifié)']].map(([k,v])=>`
       <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border)">
         <span style="color:var(--t2);font-size:10px">${k}</span>
         <span style="color:var(--t0);font-weight:600;font-family:var(--mono);font-size:10px">${v}</span>
