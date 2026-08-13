@@ -106,8 +106,8 @@ let interval = '15';
 let bots = [];
 let refreshTimer = null;
 
-const ICONS = { gold:'🥇', btc:'₿', eth:'Ξ' };
-const COLORS = { gold:'#FFD700', btc:'#00D4FF', eth:'#A78BFA' };
+const ICONS = { gold:'🥇', btc:'₿', eth:'Ξ', sol:'◎', xrp:'✕' };
+const COLORS = { gold:'#FFD700', btc:'#00D4FF', eth:'#A78BFA', sol:'#00FFA3', xrp:'#25A768' };
 
 function setTF(tf, btn) {
   interval = tf;
@@ -120,7 +120,7 @@ async function loadAll() {
   try {
     const sum = await fetch('/api/real/summary').then(r=>r.json());
     if (!sum.ok) {
-      document.getElementById('grid').innerHTML = '<div class="err">⚠️ Moteur non connecté: '+(sum.error||'')+'</div>';
+      document.getElementById('grid').innerHTML = '<div class="err">⚠️ Moteur non connecté: '+(sum.error||'erreur inconnue')+'</div>';
       return;
     }
     bots = sum.bots;

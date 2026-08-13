@@ -548,7 +548,7 @@ function renderBots(c) {
   </div>`;
   fetch('/api/real/summary').then(r=>r.json()).then(d => {
     if (!d.ok) {
-      document.getElementById('rb-list').innerHTML = '<div style="color:var(--red);font-size:11px;padding:10px">⚠️ Moteur non connecté: '+(d.error||'')+'</div>';
+      document.getElementById('rb-list').innerHTML = '<div style="color:var(--red);font-size:11px;padding:10px">⚠️ Moteur non connecté: '+(d.error||'erreur inconnue')+'</div>';
       return;
     }
     document.getElementById('rb-count').textContent = d.bots.filter(b=>b.active).length;
