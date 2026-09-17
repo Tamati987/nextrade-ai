@@ -4,8 +4,8 @@
   "description": "NexTrade AI — Bot trading platform powered by Claude",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node server.js"
+    "start": "bash deploy.sh && node server.js",
+    "dev": "bash deploy.sh && node server.js"
   },
   "engines": {
     "node": ">=18.0.0"
