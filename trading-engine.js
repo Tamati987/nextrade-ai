@@ -8,6 +8,7 @@ const fetch = require('node-fetch');
 const fs = require('fs');
 require('dotenv').config();
 const { askClaudeForControl, executeClaudeCommand, loadCommandHistory } = require('./claude-bot-controller');
+const { getClaudeTradeDecision, loadTradesLog } = require('./claude-trading-ai');
 
 const BYBIT_API  = 'https://api.bybit.com';
 const API_KEY    = process.env.BYBIT_API_KEY;
@@ -253,46 +254,23 @@ async function getCoinBalance(coin) {
 const CLAUDE_TIMEOUT_MS = 8000; // sécurité: ne jamais bloquer un cycle plus de 8s sur l'IA
 
 async function askClaude(bot, ctx) {
-  if (!process.env.ANTHROPIC_API_KEY) return { decision: 'CONFIRM', reason: 'IA non configurée — règles seules' };
-  const t0 = Date.now();
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), CLAUDE_TIMEOUT_MS);
+  if (!aiState.enabled) {
+    return { decision: 'CONFIRM', reason: 'IA en pause — règles RSI seules' };
+  }
+
   try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      signal: controller.signal,
-      headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 300,
-        system: `Tu es un validateur de trades pour un bot spot (Buy Low / Sell High, petit capital). Un signal d'ACHAT vient d'être détecté et confirmé par les règles RSI. Ton rôle : le CONFIRMER ou le REJETER selon le contexte technique. Sois conservateur : en cas de doute, REJETTE. Tu ne peux PAS modifier les montants ni la stratégie. Utilise l'historique récent de ce bot (fourni ci-dessous) pour repérer des patterns : si tes rejets récents auraient en fait été de bons trades manqués, ou si tes confirmations récentes ont mal tourné, ajuste ton jugement en conséquence plutôt que d'analyser chaque signal isolément. Réponds UNIQUEMENT en JSON strict: {"decision":"CONFIRM"|"REJECT","confidence":0-100,"reason":"explication courte en français"}`,
-        messages: [{ role: 'user', content: `Signal ACHAT détecté et confirmé:
-- Marché: ${bot.symbol} (${bot.name})
-- Prix actuel: $${ctx.price}
-- RSI(14): ${ctx.rsi} (seuil achat: <${bot.rsi_buy}, en train de remonter depuis ${ctx.rsiPrev})
-- EMA9: ${ctx.e9.toFixed(2)} | EMA21: ${ctx.e21.toFixed(2)} — le signal ne se base PAS sur un croisement EMA9/EMA21 déjà effectué (${ctx.e9 > ctx.e21 ? 'EMA9 est déjà au-dessus d’EMA21' : 'EMA9 est encore sous EMA21, croisement pas encore effectué'}), mais sur le fait qu’EMA9 est en train de remonter (momentum court terme qui se retourne à la hausse) : c’est normal et voulu que ce signal arrive avant un croisement complet, ne le REJETTE pas pour ce seul motif
-- Variation 24h approximative: ${ctx.chg24h}%
-- 5 dernières clôtures: ${ctx.lastCloses.join(', ')}
-- Capital du trade: $${getBotEquity(bot).toFixed(2)} (capital composé, initial $${bot.capital}) | TP: +${bot.tp*100}% | SL: -${bot.sl*100}%
-- Historique récent de ce bot (du plus ancien au plus récent) :
-${ctx.recentHistory}
-Valide ou rejette cette entrée.` }]
-      })
-    });
-    clearTimeout(timeoutId);
-    const d = await res.json();
-    const text = d.content?.[0]?.text || '';
-    const json = JSON.parse(text.replace(/```json|```/g, '').trim());
-    console.log(`🧠 Claude a répondu en ${Date.now() - t0}ms`);
-    return { decision: json.decision === 'REJECT' ? 'REJECT' : 'CONFIRM', confidence: json.confidence, reason: json.reason };
+    const claudeDecision = await getClaudeTradeDecision(bot, ctx);
+    
+    if (claudeDecision.action === 'BUY' || claudeDecision.action === 'BUY_HOLD') {
+      return { decision: 'CONFIRM', confidence: claudeDecision.confidence, reason: claudeDecision.reason };
+    } else if (claudeDecision.action.includes('SELL')) {
+      return { decision: 'SELL_SIGNAL', confidence: claudeDecision.confidence, reason: claudeDecision.reason };
+    } else {
+      return { decision: 'REJECT', confidence: claudeDecision.confidence, reason: `Claude: ${claudeDecision.reason}` };
+    }
   } catch(e) {
-    clearTimeout(timeoutId);
-    const elapsed = Date.now() - t0;
-    // En cas d'erreur IA (y compris timeout) : on suit les règles (l'IA est un filtre optionnel, jamais bloquant)
-    const msg = e.name === 'AbortError'
-      ? `Timeout après ${elapsed}ms (>${CLAUDE_TIMEOUT_MS}ms)`
-      : e.message.slice(0, 50);
-    return { decision: 'CONFIRM', reason: `IA indisponible — règles RSI appliquées (${msg})` };
+    console.error(`❌ Erreur Claude:`, e.message.slice(0, 50));
+    return { decision: 'CONFIRM', reason: `IA indisponible — règles RSI appliquées` };
   }
 }
 
@@ -493,6 +471,7 @@ async function startTradingEngine() {
   loadDecisions(); // ── restaure l'historique des décisions IA (audit) ──
   loadEquity();    // ── restaure le capital composé par bot ──
   loadCommandHistory(); // ── charge l'historique des commandes Claude ──
+  loadTradesLog(); // ── charge les décisions trading autonomes de Claude ──
   try {
     const bal = await getBalance();
     console.log(`💰 Solde Bybit: $${bal.toFixed(2)} USDT`);
