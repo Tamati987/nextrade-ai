@@ -7,6 +7,7 @@ const crypto = require('crypto');
 const fetch = require('node-fetch');
 const fs = require('fs');
 require('dotenv').config();
+const { askClaudeForControl, executeClaudeCommand, loadCommandHistory } = require('./claude-bot-controller');
 
 const BYBIT_API  = 'https://api.bybit.com';
 const API_KEY    = process.env.BYBIT_API_KEY;
@@ -487,9 +488,11 @@ async function runBot(bot) {
 
 async function startTradingEngine() {
   console.log('\n🚀 NexTrade AI — Moteur SPOT Bybit démarré (Buy Low / Sell High)');
+  console.log('🧠 Claude Control — ACTIVÉ (contrôle avancé des bots)');
   loadPositions(); // ── restaure les positions ouvertes avant précédent redéploiement ──
   loadDecisions(); // ── restaure l'historique des décisions IA (audit) ──
   loadEquity();    // ── restaure le capital composé par bot ──
+  loadCommandHistory(); // ── charge l'historique des commandes Claude ──
   try {
     const bal = await getBalance();
     console.log(`💰 Solde Bybit: $${bal.toFixed(2)} USDT`);
@@ -497,15 +500,39 @@ async function startTradingEngine() {
     console.error('❌ Connexion Bybit:', e.message);
     console.log('💡 Si "blocage géographique": changez la région Railway vers EU West (Settings → Region)');
   }
+  
   const cycle = async () => {
-    console.log('\n⏰ Cycle:', new Date().toLocaleString('fr-FR'));
+    console.log('\n⏰ Cycle trading:', new Date().toLocaleString('fr-FR'));
     for (const bot of BOTS.filter(b => b.active)) {
       await runBot(bot);
       await new Promise(r => setTimeout(r, 1500));
     }
   };
+  
+  const claudeControlCycle = async () => {
+    console.log('\n🧠 Cycle contrôle Claude:', new Date().toLocaleString('fr-FR'));
+    try {
+      const command = await askClaudeForControl(
+        BOTS,
+        positions,
+        decisionHistory,
+        botEquity
+      );
+      
+      if (command.action && command.action !== 'NONE') {
+        await executeClaudeCommand(command, BOTS, module.exports);
+      }
+    } catch (e) {
+      console.error('❌ Erreur cycle Claude:', e.message);
+    }
+  };
+  
   await cycle();
   setInterval(cycle, 15 * 60 * 1000);
+  
+  // Exécuter Claude Control après le premier cycle, puis toutes les 15 min
+  await claudeControlCycle();
+  setInterval(claudeControlCycle, 15 * 60 * 1000);
 }
 
 module.exports = { startTradingEngine, BOTS, positions, api, getBalance, getPrice, lastVerdicts, aiState, signalState, decisionHistory: () => decisionHistory, askClaude, getBotEquity, CIRCUIT_BREAKER_DRAWDOWN };

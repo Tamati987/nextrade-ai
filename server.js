@@ -383,6 +383,68 @@ app.get('/api/real/orders', async (req, res) => {
   }
 });
 
+// ── CLAUDE CONTROL ENDPOINTS ──
+app.get('/api/claude/commands/history', requireAdmin, (req, res) => {
+  try {
+    const { claudeCommandHistory } = require('./claude-bot-controller');
+    const limit = parseInt(req.query.limit) || 20;
+    const history = claudeCommandHistory().slice(-limit);
+    res.json({ ok: true, commands: history, total: claudeCommandHistory().length });
+  } catch(e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post('/api/claude/command', requireAdmin, async (req, res) => {
+  try {
+    const { action, target, parameters } = req.body;
+    if (!action) return res.status(400).json({ ok: false, error: 'action requise' });
+    
+    const { executeClaudeCommand } = require('./claude-bot-controller');
+    const { BOTS } = require('./trading-engine');
+    
+    const command = {
+      timestamp: new Date().toISOString(),
+      action: action.toUpperCase(),
+      target: target || null,
+      parameters: parameters || {},
+      reason: 'Commande manuelle via API',
+      status: 'pending'
+    };
+    
+    await executeClaudeCommand(command, BOTS, require('./trading-engine'));
+    
+    console.log(`🎯 Commande Claude manuelle: ${action} | ${target || 'global'}`);
+    res.json({ ok: true, command });
+  } catch(e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.get('/api/claude/status', requireAdmin, (req, res) => {
+  try {
+    const { BOTS, positions, getBotEquity } = require('./trading-engine');
+    const { claudeCommandHistory } = require('./claude-bot-controller');
+    
+    const activeCount = BOTS.filter(b => b.active).length;
+    const lastCommand = claudeCommandHistory().slice(-1)[0] || null;
+    
+    res.json({
+      ok: true,
+      status: {
+        botsActive: activeCount,
+        totalBots: BOTS.length,
+        openPositions: positions.size,
+        lastCommand: lastCommand,
+        apiKey: !!process.env.ANTHROPIC_API_KEY,
+        claudeEnabled: true
+      }
+    });
+  } catch(e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 app.listen(PORT, async () => {
   console.log(`\n🚀 NexTrade AI → http://localhost:${PORT}`);
   console.log(`💳 Stripe: ${process.env.STRIPE_SECRET_KEY ? '✅' : '❌ manquant'}`);
