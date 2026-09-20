@@ -1,61 +1,45 @@
-// ═══════════════════════════════════════════════════════
-//   NEXTRADE AI — MOTEUR DE TRADING BYBIT (SPOT)
-//   Buy Low / Sell High — adapté petit capital
-//   + Filtre anti-signal-prématuré (RSI rebond + confirmation 1 cycle)
-// ═══════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════
+//   NEXTRADE AI — MOTEUR DE TRADING AVANCÉ
+//   Claude contrôle les positions court/moyen/long terme simultanément
+// ═══════════════════════════════════════════════════════════════════════════
+
 const crypto = require('crypto');
 const fetch = require('node-fetch');
 const fs = require('fs');
 require('dotenv').config();
-const { askClaudeForControl, executeClaudeCommand, loadCommandHistory } = require('./claude-bot-controller');
-const { getClaudeTradeDecision, loadTradesLog } = require('./claude-trading-ai');
 
-const BYBIT_API  = 'https://api.bybit.com';
-const API_KEY    = process.env.BYBIT_API_KEY;
+const { 
+  askClaudeForTradingDecisions, 
+  MultiHorizonPositionManager,
+  loadDecisions 
+} = require('./claude-trading-decisioner');
+
+const BYBIT_API = 'https://api.bybit.com';
+const API_KEY = process.env.BYBIT_API_KEY;
 const API_SECRET = process.env.BYBIT_SECRET;
 
-// ── PERSISTANCE (survit aux redéploiements via Volume Railway) ──
-const DATA_DIR = process.env.RAILWAY_VOLUME_MOUNT_PATH || '.'; // fallback local si pas de volume
-const POSITIONS_FILE = `${DATA_DIR}/positions.json`;
-const DECISIONS_FILE = `${DATA_DIR}/decisions.json`;
-const EQUITY_FILE    = `${DATA_DIR}/equity.json`;
-const MAX_DECISIONS = 500; // borne la taille du fichier d'historique
-const CIRCUIT_BREAKER_DRAWDOWN = 0.30; // pause automatique si le capital composé chute de 30% sous le capital initial
+const DATA_DIR = process.env.RAILWAY_VOLUME_MOUNT_PATH || '.';
+const POSITIONS_FILE = `${DATA_DIR}/positions-multi.json`;
+const EQUITY_FILE = `${DATA_DIR}/equity.json`;
 
-if (!process.env.RAILWAY_VOLUME_MOUNT_PATH) {
-  console.warn('⚠️ RAILWAY_VOLUME_MOUNT_PATH non défini — positions.json et decisions.json seront écrits sur le disque éphémère du conteneur et PERDUS au prochain redéploiement. Attachez un Volume Railway et pointez-le vers cette variable.');
-}
+// ── BOTS CONFIGURATION ──
+const BOTS = [
+  { id: 'gold', name: 'Gold Sentinel', symbol: 'XAUTUSDT', capital: 7, active: true, interval: '15', qtyDec: 5 },
+  { id: 'btc', name: 'Alpha BTC', symbol: 'BTCUSDT', capital: 7, active: true, interval: '15', qtyDec: 6 },
+  { id: 'eth', name: 'Grid ETH', symbol: 'ETHUSDT', capital: 7, active: true, interval: '15', qtyDec: 5 },
+  { id: 'sol', name: 'Sol Momentum', symbol: 'SOLUSDT', capital: 3, active: true, interval: '15', qtyDec: 2 },
+  { id: 'xrp', name: 'XRP Surge', symbol: 'XRPUSDT', capital: 3, active: true, interval: '15', qtyDec: 1 },
+];
 
-function savePositions() {
-  try {
-    fs.writeFileSync(POSITIONS_FILE, JSON.stringify(Object.fromEntries(positions), null, 2));
-  } catch (e) {
-    console.error('⚠️ Échec sauvegarde positions:', e.message);
-  }
-}
-
-function loadPositions() {
-  try {
-    if (fs.existsSync(POSITIONS_FILE)) {
-      const obj = JSON.parse(fs.readFileSync(POSITIONS_FILE, 'utf8'));
-      for (const [id, pos] of Object.entries(obj)) positions.set(id, pos);
-      console.log(`📂 ${positions.size} position(s) restaurée(s) depuis ${POSITIONS_FILE}`);
-    } else {
-      console.log(`📂 Aucun fichier de positions trouvé (${POSITIONS_FILE}) — départ à zéro`);
-    }
-  } catch (e) {
-    console.error('⚠️ Échec chargement positions:', e.message);
-  }
-}
-
-// ── CAPITAL COMPOSÉ PAR BOT (grandit avec les gains réalisés, rétrécit avec les pertes) ──
-const botEquity = new Map(); // botId -> capital actuel de ce bot (démarre à bot.capital, évolue avec chaque trade clôturé)
+// ── MULTI-HORIZON POSITION MANAGER ──
+const positionManager = new MultiHorizonPositionManager();
+const botEquity = new Map();
 
 function saveEquity() {
   try {
     fs.writeFileSync(EQUITY_FILE, JSON.stringify(Object.fromEntries(botEquity), null, 2));
   } catch (e) {
-    console.error('⚠️ Échec sauvegarde capital composé:', e.message);
+    console.error('⚠️ Échec sauvegarde capital:', e.message);
   }
 }
 
@@ -64,224 +48,80 @@ function loadEquity() {
     if (fs.existsSync(EQUITY_FILE)) {
       const obj = JSON.parse(fs.readFileSync(EQUITY_FILE, 'utf8'));
       for (const [id, v] of Object.entries(obj)) botEquity.set(id, v);
-      console.log(`📂 Capital composé restauré depuis ${EQUITY_FILE}`);
+      console.log(`📂 Capital composé restauré`);
     }
   } catch (e) {
-    console.error('⚠️ Échec chargement capital composé:', e.message);
+    console.error('⚠️ Échec chargement capital:', e.message);
   }
 }
 
-// Renvoie le capital actuel du bot (initialisé à bot.capital si jamais tradé)
 function getBotEquity(bot) {
   if (!botEquity.has(bot.id)) botEquity.set(bot.id, bot.capital);
   return botEquity.get(bot.id);
 }
 
-// Met à jour le capital composé après un trade clôturé, et déclenche le coupe-circuit
-// si le capital est tombé sous CIRCUIT_BREAKER_DRAWDOWN du capital initial du bot.
 function applyTradePnl(bot, pnl) {
-  const newEquity = Math.max(getBotEquity(bot) + pnl, 0.5); // garde-fou : jamais en dessous de $0.50
+  const newEquity = Math.max(getBotEquity(bot) + pnl, 0.5);
   botEquity.set(bot.id, newEquity);
   saveEquity();
-  console.log(`📊 Capital composé ${bot.name}: $${newEquity.toFixed(2)} (${pnl>=0?'+':''}$${pnl.toFixed(2)}, initial $${bot.capital})`);
-
-  const floor = bot.capital * (1 - CIRCUIT_BREAKER_DRAWDOWN);
-  if (newEquity < floor && bot.active) {
-    bot.active = false;
-    console.error(`🚨 COUPE-CIRCUIT: ${bot.name} mis en pause automatiquement — capital composé $${newEquity.toFixed(2)} < seuil $${floor.toFixed(2)} (-${(CIRCUIT_BREAKER_DRAWDOWN*100).toFixed(0)}% du capital initial $${bot.capital}). Réactivez-le manuellement après analyse.`);
-  }
+  console.log(`📊 Capital ${bot.name}: $${newEquity.toFixed(2)} (${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)})`);
 }
 
-// ── HISTORIQUE DES DÉCISIONS IA (traçabilité / audit — horodatage UTC non-ambigu) ──
-let decisionHistory = [];
-
-function saveDecisions() {
-  try {
-    fs.writeFileSync(DECISIONS_FILE, JSON.stringify(decisionHistory, null, 2));
-  } catch (e) {
-    console.error('⚠️ Échec sauvegarde décisions:', e.message);
-  }
-}
-
-function loadDecisions() {
-  try {
-    if (fs.existsSync(DECISIONS_FILE)) {
-      decisionHistory = JSON.parse(fs.readFileSync(DECISIONS_FILE, 'utf8'));
-      console.log(`📂 ${decisionHistory.length} décision(s) restaurée(s) depuis ${DECISIONS_FILE}`);
-    }
-  } catch (e) {
-    console.error('⚠️ Échec chargement décisions:', e.message);
-    decisionHistory = [];
-  }
-}
-
-// Enregistre une décision avec TOUT le contexte exact vu par Claude/les règles à cet instant,
-// pour pouvoir l'auditer plus tard sans dépendre de la disponibilité future des bougies Bybit.
-function recordDecision(bot, ctx, verdict) {
-  const entry = {
-    botId: bot.id,
-    botName: bot.name,
-    symbol: bot.symbol,
-    at: new Date().toISOString(), // UTC non-ambigu (ne pas reformater avec le fuseau du navigateur)
-    decision: verdict.decision,
-    confidence: verdict.confidence ?? null,
-    reason: verdict.reason,
-    aiEnabled: aiState.enabled,
-    context: {
-      price: ctx.price,
-      rsi: ctx.rsi,
-      rsiPrev: ctx.rsiPrev,
-      ema9: ctx.e9,
-      ema21: ctx.e21,
-      ema9Rising: ctx.e9Rising,
-      chg24h: ctx.chg24h,
-      lastCloses: ctx.lastCloses,
-      tp: bot.tp,
-      sl: bot.sl,
-      capital: getBotEquity(bot),
-      capitalInitial: bot.capital,
-    },
-    outcome: null, // rempli par recordTradeOutcome() une fois le trade clôturé (si CONFIRM)
-  };
-  decisionHistory.push(entry);
-  if (decisionHistory.length > MAX_DECISIONS) decisionHistory = decisionHistory.slice(-MAX_DECISIONS);
-  saveDecisions();
-  lastVerdicts.set(bot.id, { decision: verdict.decision, confidence: verdict.confidence, reason: verdict.reason, at: entry.at, price: ctx.price, rsi: ctx.rsi });
-  return entry;
-}
-
-// Relie le résultat d'un trade clôturé à la décision CONFIRM qui l'a déclenché, pour que
-// Claude puisse ensuite apprendre de ses décisions passées (pas juste juger dans le vide).
-function recordTradeOutcome(botId, pnl) {
-  for (let i = decisionHistory.length - 1; i >= 0; i--) {
-    const d = decisionHistory[i];
-    if (d.botId === botId && d.decision === 'CONFIRM' && d.outcome == null) {
-      d.outcome = { pnl: +pnl.toFixed(4), closedAt: new Date().toISOString() };
-      saveDecisions();
-      return;
-    }
-  }
-}
-
-// Résume les N dernières décisions de ce bot (avec résultat si connu) pour donner à Claude
-// un vrai historique au lieu de juger chaque signal isolément.
-function getRecentHistorySummary(botId, n = 3) {
-  const recent = decisionHistory.filter(d => d.botId === botId).slice(-n);
-  if (!recent.length) return 'Aucun historique pour ce bot pour le moment.';
-  return recent.map(d => {
-    const when = d.at.slice(0, 16).replace('T', ' ') + ' UTC';
-    let outcomeTxt = '';
-    if (d.decision === 'CONFIRM') {
-      outcomeTxt = d.outcome ? ` → résultat: ${d.outcome.pnl>=0?'+':''}$${d.outcome.pnl.toFixed(2)}` : ' → résultat: position encore ouverte';
-    }
-    return `${when} — ${d.decision} (RSI ${d.context.rsi})${outcomeTxt} — "${d.reason}"`;
-  }).join('\n');
-}
-
-// SPOT uniquement : achat bas → vente haute (pas de short, pas de levier)
-// Capital adapté à ~22 USDT au total
-const BOTS = [
-  { id:'gold', name:'Gold Sentinel', symbol:'XAUTUSDT', capital:7, rsi_buy:38, rsi_sell:65, tp:0.05, sl:0.02, active:true, interval:'15', qtyDec:5 },
-  { id:'btc',  name:'Alpha RSI',     symbol:'BTCUSDT',  capital:7, rsi_buy:35, rsi_sell:68, tp:0.05, sl:0.02, active:true, interval:'15', qtyDec:6 },
-  { id:'eth',  name:'Grid ETH',      symbol:'ETHUSDT',  capital:7, rsi_buy:40, rsi_sell:62, tp:0.05, sl:0.02, active:true, interval:'15', qtyDec:5 },
-  // Nouvelles paires : capital réduit ($3) tant qu'elles n'ont pas fait leurs preuves, et vu le
-  // solde total limité (~22$) partagé entre les 5 bots. qtyDec choisi conservateur (précision
-  // Bybit non vérifiable depuis cet environnement sans accès réseau) — à confirmer sur les
-  // premiers trades réels, ajuster si Bybit rejette une quantité.
-  { id:'sol',  name:'Sol Momentum',  symbol:'SOLUSDT',  capital:3, rsi_buy:35, rsi_sell:68, tp:0.05, sl:0.02, active:true, interval:'15', qtyDec:2 },
-  { id:'xrp',  name:'XRP Surge',     symbol:'XRPUSDT',  capital:3, rsi_buy:35, rsi_sell:68, tp:0.05, sl:0.02, active:true, interval:'15', qtyDec:1 },
-];
-
-const positions = new Map();
-const lastVerdicts = new Map(); // dernier verdict par bot (accès rapide pour le dashboard)
-const aiState = { enabled: true }; // interrupteur validation Claude
-
-// ── ÉTAT DE CONFIRMATION DE SIGNAL (anti-signal-prématuré) ──
-const signalState = new Map(); // botId -> { rsiHistory: [], confirmCount: 0, e9Prev: null }
-
-function getSignalState(botId) {
-  if (!signalState.has(botId)) {
-    signalState.set(botId, { rsiHistory: [], confirmCount: 0, e9Prev: null });
-  }
-  return signalState.get(botId);
-}
-
+// ── API HELPER ──
 function sign(params, ts) {
   return crypto.createHmac('sha256', API_SECRET).update(ts + API_KEY + '5000' + params).digest('hex');
 }
 
 async function api(method, path, params = {}) {
-  const ts  = Date.now().toString();
+  const ts = Date.now().toString();
   const str = method === 'GET' ? new URLSearchParams(params).toString() : JSON.stringify(params);
   const url = method === 'GET' ? `${BYBIT_API}${path}?${str}` : `${BYBIT_API}${path}`;
   const res = await fetch(url, {
     method,
-    headers: { 'X-BAPI-API-KEY': API_KEY, 'X-BAPI-SIGN': sign(str, ts), 'X-BAPI-TIMESTAMP': ts, 'X-BAPI-RECV-WINDOW': '5000', 'Content-Type': 'application/json' },
+    headers: {
+      'X-BAPI-API-KEY': API_KEY,
+      'X-BAPI-SIGN': sign(str, ts),
+      'X-BAPI-TIMESTAMP': ts,
+      'X-BAPI-RECV-WINDOW': '5000',
+      'Content-Type': 'application/json',
+    },
     body: method !== 'GET' ? str : undefined,
   });
   const text = await res.text();
-  try { return JSON.parse(text); }
-  catch(e) { throw new Error(`Réponse non-JSON de Bybit (blocage géographique probable): ${text.slice(0,80)}`); }
+  try {
+    return JSON.parse(text);
+  } catch (e) {
+    throw new Error(`Réponse non-JSON de Bybit: ${text.slice(0, 80)}`);
+  }
 }
 
 async function getCandles(symbol, interval) {
-  const d = await api('GET', '/v5/market/kline', { category:'spot', symbol, interval, limit:100 });
+  const d = await api('GET', '/v5/market/kline', { category: 'spot', symbol, interval, limit: 100 });
   if (d.retCode !== 0) throw new Error(d.retMsg);
-  return d.result.list.map(c => ({ t:+c[0], o:+c[1], h:+c[2], l:+c[3], c:+c[4] })).reverse();
+  return d.result.list.map(c => ({ t: +c[0], o: +c[1], h: +c[2], l: +c[3], c: +c[4] })).reverse();
 }
 
 async function getPrice(symbol) {
-  const d = await api('GET', '/v5/market/tickers', { category:'spot', symbol });
+  const d = await api('GET', '/v5/market/tickers', { category: 'spot', symbol });
   if (d.retCode !== 0) throw new Error(d.retMsg);
   return +d.result.list[0].lastPrice;
 }
 
 async function getBalance() {
-  const d = await api('GET', '/v5/account/wallet-balance', { accountType:'UNIFIED' });
+  const d = await api('GET', '/v5/account/wallet-balance', { accountType: 'UNIFIED' });
   if (d.retCode !== 0) throw new Error(d.retMsg);
   const usdt = d.result.list[0]?.coin?.find(c => c.coin === 'USDT');
   return +(usdt?.walletBalance || 0);
 }
 
-async function getCoinBalance(coin) {
-  const d = await api('GET', '/v5/account/wallet-balance', { accountType:'UNIFIED' });
-  if (d.retCode !== 0) throw new Error(d.retMsg);
-  const c = d.result.list[0]?.coin?.find(x => x.coin === coin);
-  return +(c?.walletBalance || 0);
-}
-
-// ── VALIDATION IA CLAUDE (appelée uniquement sur signal d'achat confirmé) ──
-const CLAUDE_TIMEOUT_MS = 8000; // sécurité: ne jamais bloquer un cycle plus de 8s sur l'IA
-
-async function askClaude(bot, ctx) {
-  if (!aiState.enabled) {
-    return { decision: 'CONFIRM', reason: 'IA en pause — règles RSI seules' };
-  }
-
-  try {
-    const claudeDecision = await getClaudeTradeDecision(bot, ctx);
-    
-    if (claudeDecision.action === 'BUY' || claudeDecision.action === 'BUY_HOLD') {
-      return { decision: 'CONFIRM', confidence: claudeDecision.confidence, reason: claudeDecision.reason };
-    } else if (claudeDecision.action.includes('SELL')) {
-      return { decision: 'SELL_SIGNAL', confidence: claudeDecision.confidence, reason: claudeDecision.reason };
-    } else {
-      return { decision: 'REJECT', confidence: claudeDecision.confidence, reason: `Claude: ${claudeDecision.reason}` };
-    }
-  } catch(e) {
-    console.error(`❌ Erreur Claude:`, e.message.slice(0, 50));
-    return { decision: 'CONFIRM', reason: `IA indisponible — règles RSI appliquées` };
-  }
-}
-
 function rsi(candles, p = 14) {
   let g = 0, l = 0;
   for (let i = candles.length - p; i < candles.length; i++) {
-    const d = candles[i].c - candles[i-1].c;
+    const d = candles[i].c - candles[i - 1].c;
     d > 0 ? g += d : l -= d;
   }
   const al = l / p;
-  return al === 0 ? 100 : +(100 - 100 / (1 + (g/p) / al)).toFixed(2);
+  return al === 0 ? 100 : +(100 - 100 / (1 + (g / p) / al)).toFixed(2);
 }
 
 function ema(candles, p) {
@@ -291,173 +131,126 @@ function ema(candles, p) {
   return e;
 }
 
-// SPOT: on achète en montant USDT (marketUnit quoteCoin), on revend la quantité de coin
-async function buySpot(bot, price) {
-  const capital = getBotEquity(bot); // capital composé : grandit/rétrécit avec les trades précédents
-  console.log(`\n🟢 ${bot.name} | ACHAT ${bot.symbol} @ $${price} | ${capital.toFixed(2)} USDT (capital composé, initial $${bot.capital})`);
-  const d = await api('POST', '/v5/order/create', {
-    category:'spot', symbol:bot.symbol, side:'Buy', orderType:'Market',
-    qty: capital.toFixed(2), marketUnit:'quoteCoin', timeInForce:'IOC',
-  });
-  if (d.retCode !== 0) { console.error('❌ Achat échoué:', d.retMsg); return null; }
-  const qty = +(capital / price).toFixed(bot.qtyDec);
-  console.log('✅ Achat OK:', d.result.orderId, '| ~', qty, bot.symbol.replace('USDT',''));
-  return { orderId:d.result.orderId, price, qty, side:'buy', capitalUsed: capital };
-}
+// ── EXECUTION DES ORDRES CLAUDE ──
+async function executeClaudeDecision(bot, decision, price) {
+  const decisions = [];
 
-async function sellSpot(bot, price) {
-  const pos = positions.get(bot.id);
-  if (!pos) return;
-
-  // ── Quantité vendable réelle: min(position enregistrée, solde réel du coin), arrondie VERS LE BAS ──
-  // Corrige 2 causes de rejet Bybit: frais prélevés en coin à l'achat (solde réel < qty brute)
-  // et trop de décimales (précision max = qtyDec)
-  const coin = bot.symbol.replace('USDT', '');
-  let avail = pos.qty;
-  try { avail = await getCoinBalance(coin); }
-  catch(e) { console.log(`⚠️ Lecture solde ${coin} impossible (${e.message.slice(0,40)}) — utilisation qty enregistrée`); }
-  const factor = Math.pow(10, bot.qtyDec);
-  const qtyToSell = Math.floor(Math.min(pos.qty, avail) * factor) / factor;
-
-  if (qtyToSell <= 0) {
-    // Solde réel quasi nul alors qu'une position est enregistrée : elle a déjà été
-    // liquidée ailleurs (vente manuelle, précision Bybit...). La garder bloquerait le bot
-    // indéfiniment (plus jamais d'achat possible tant que `pos` existe). On l'efface et on
-    // alerte fort plutôt que de la laisser "fantôme".
-    console.error(`🚨 ${bot.name}: position enregistrée (${pos.qty} ${coin}) mais solde réel quasi nul (${avail}) — position effacée pour débloquer le bot. Vérifiez l'historique Bybit manuellement.`);
-    positions.delete(bot.id);
-    savePositions();
-    return;
+  // Court terme
+  if (decision.shortTerm?.action === 'BUY') {
+    const capital = getBotEquity(bot) * 0.3; // 30% du capital pour court terme
+    console.log(`🟢 ACHAT COURT TERME ${bot.name} @ $${price} | $${capital.toFixed(2)}`);
+    const pos = {
+      horizon: 'SHORT',
+      entryPrice: price,
+      tp: price * (1 + decision.shortTerm.tp / 100),
+      sl: price * (1 - decision.shortTerm.sl / 100),
+      capital,
+      openedAt: new Date().toISOString(),
+      reason: decision.shortTerm.reason,
+    };
+    positionManager.addPosition(bot.id, 'shortTerm', pos);
+    decisions.push('SHORT_TERM_BUY');
   }
 
-  console.log(`\n🔴 ${bot.name} | VENTE ${bot.symbol} @ $${price} | qty ${qtyToSell} (enregistrée: ${pos.qty}, solde: ${avail})`);
-  const d = await api('POST', '/v5/order/create', {
-    category:'spot', symbol:bot.symbol, side:'Sell', orderType:'Market',
-    qty: qtyToSell.toFixed(bot.qtyDec), marketUnit:'baseCoin', timeInForce:'IOC',
-  });
-  if (d.retCode !== 0) { console.error('❌ Vente échouée:', d.retMsg); return; }
-  const pnl = (price - pos.price) * qtyToSell;
-  console.log(`💰 ${bot.name} vendu | PnL: ${pnl>=0?'+':''}$${pnl.toFixed(2)}`);
-  applyTradePnl(bot, pnl);
-  recordTradeOutcome(bot.id, pnl);
-  positions.delete(bot.id);
-  savePositions();
-  return pnl;
+  // Moyen terme
+  if (decision.mediumTerm?.action === 'BUY') {
+    const capital = getBotEquity(bot) * 0.5; // 50% du capital pour moyen terme
+    console.log(`🟡 ACHAT MOYEN TERME ${bot.name} @ $${price} | $${capital.toFixed(2)}`);
+    const pos = {
+      horizon: 'MEDIUM',
+      entryPrice: price,
+      tp: price * (1 + decision.mediumTerm.tp / 100),
+      sl: price * (1 - decision.mediumTerm.sl / 100),
+      capital,
+      openedAt: new Date().toISOString(),
+      reason: decision.mediumTerm.reason,
+    };
+    positionManager.addPosition(bot.id, 'mediumTerm', pos);
+    decisions.push('MEDIUM_TERM_BUY');
+  }
+
+  // Long terme
+  if (decision.longTerm?.action === 'BUY') {
+    const capital = getBotEquity(bot); // 100% du capital pour long terme (position principale)
+    console.log(`🔵 ACHAT LONG TERME ${bot.name} @ $${price} | $${capital.toFixed(2)}`);
+    const pos = {
+      horizon: 'LONG',
+      entryPrice: price,
+      tp: price * (1 + decision.longTerm.tp / 100),
+      sl: price * (1 - decision.longTerm.sl / 100),
+      capital,
+      openedAt: new Date().toISOString(),
+      reason: decision.longTerm.reason,
+    };
+    positionManager.addPosition(bot.id, 'longTerm', pos);
+    decisions.push('LONG_TERM_BUY');
+  }
+
+  return decisions;
 }
 
+// ── BOT PRINCIPAL ──
 async function runBot(bot) {
   try {
     const candles = await getCandles(bot.symbol, bot.interval);
-    const price   = await getPrice(bot.symbol);
-    const r       = rsi(candles);
-    const e9      = ema(candles, 9);
-    const e21     = ema(candles, 21);
-    const pos     = positions.get(bot.id);
+    const price = await getPrice(bot.symbol);
+    const r = rsi(candles);
+    const e9 = ema(candles, 9);
+    const e21 = ema(candles, 21);
 
-    // ── suivi de l'historique RSI pour détecter un rebond ──
-    const state = getSignalState(bot.id);
-    state.rsiHistory.push(r);
-    if (state.rsiHistory.length > 5) state.rsiHistory.shift();
-    const rsiPrev = state.rsiHistory.length >= 2
-      ? state.rsiHistory[state.rsiHistory.length - 2]
-      : r;
-    const rsiRebondit = r > rsiPrev; // le RSI remonte = la survente s'essouffle
+    // Préparer les données de marché
+    const firstClose = candles[0].c;
+    const chg24h = (((price - firstClose) / firstClose) * 100).toFixed(2);
+    const change7d = ((price - candles[Math.max(0, candles.length - 672)].c) / candles[Math.max(0, candles.length - 672)].c * 100).toFixed(2);
+    const change30d = ((price - candles[Math.max(0, candles.length - 2880)].c) / candles[Math.max(0, candles.length - 2880)].c * 100).toFixed(2);
+    const lastCloses = candles.slice(-5).map(c => c.c);
+    const volatility = (Math.max(...candles.slice(-20).map(c => c.h)) - Math.min(...candles.slice(-20).map(c => c.l))) / price * 100;
 
-    // ── EMA9 en train de remonter (momentum temps réel) plutôt qu'un croisement EMA9>EMA21 déjà
-    // effectué : ce dernier est un signal en retard qui arrive presque toujours après que le RSI
-    // soit déjà repassé au-dessus du seuil d'achat, ce qui empêchait quasiment toute entrée.
-    const e9Rising = state.e9Prev !== null && e9 > state.e9Prev;
-    state.e9Prev = e9;
+    const marketData = {
+      price,
+      rsi: r,
+      ema9: e9,
+      ema21: e21,
+      chg1h: chg24h,
+      change24h: parseFloat(chg24h),
+      change7d: parseFloat(change7d),
+      change30d: parseFloat(change30d),
+      volatility,
+      lastCloses,
+      trend: e9 > e21 ? 'UP' : 'DOWN',
+    };
 
-    console.log(`\n📊 ${bot.name} | $${price} | RSI:${r} (préc. ${rsiPrev}) | EMA9:${e9.toFixed(2)}${e9Rising?' ↑':''} | EMA21:${e21.toFixed(2)}`);
+    console.log(`\n📊 ${bot.name} | $${price} | RSI:${r} | EMA9:${e9.toFixed(2)} | EMA21:${e21.toFixed(2)}`);
 
-    if (pos) {
-      const pct = (price - pos.price) / pos.price;
-      const ROUND_TRIP_FEES = 0.002;  // ~0.1% achat + 0.1% vente
-      const TRAIL_PULLBACK  = 0.004;  // recul depuis le plus haut qui déclenche la vente une fois le stop suiveur armé
-      console.log(`📈 Position achetée @ $${pos.price} | PnL: ${(pct*100).toFixed(2)}%`);
-      if (pct >= bot.tp)  { console.log('🎯 Take Profit!'); await sellSpot(bot, price); state.confirmCount = 0; return; }
-      if (pct <= -bot.sl) { console.log('🛑 Stop Loss!');   await sellSpot(bot, price); state.confirmCount = 0; return; }
-
-      // ── Stop suiveur : au lieu de vendre dès le croisement RSI, on arme un trailing stop
-      // pour laisser courir les gagnants au-delà du simple signal RSI, sans dépasser le TP.
-      if (!pos.trailPeak && r > bot.rsi_sell && pct > ROUND_TRIP_FEES) {
-        pos.trailPeak = price;
-        savePositions();
-        console.log(`📡 RSI haut (${r}) + profit net ${(pct*100).toFixed(2)}% — stop suiveur armé @ $${price}`);
-        return;
-      }
-      if (pos.trailPeak) {
-        if (price > pos.trailPeak) { pos.trailPeak = price; savePositions(); }
-        const pullback = (pos.trailPeak - price) / pos.trailPeak;
-        // ── Plancher de rentabilité : une fois le stop suiveur armé, si le prix retombe au
-        // seuil de rentabilité (frais) avant d'avoir reculé de 0.4% depuis le sommet, on vend
-        // quand même immédiatement. Sans ce plancher, un sommet atteint juste au-dessus du seuil
-        // d'armement (0.2%) laissait le recul de 0.4% faire retomber le trade sous le prix d'achat
-        // — une position "protégée" pouvait finir en perte malgré le stop suiveur.
-        if (pullback >= TRAIL_PULLBACK || pct <= ROUND_TRIP_FEES) {
-          const reason = pullback >= TRAIL_PULLBACK
-            ? `recul de ${(pullback*100).toFixed(2)}% depuis le plus haut $${pos.trailPeak.toFixed(2)}`
-            : `retombé au plancher de rentabilité (PnL ${(pct*100).toFixed(2)}% ≤ frais ${(ROUND_TRIP_FEES*100).toFixed(1)}%)`;
-          console.log(`🔄 Stop suiveur déclenché — ${reason} → vente`);
-          await sellSpot(bot, price); state.confirmCount = 0; return;
-        }
-        console.log(`📡 Stop suiveur actif — plus haut $${pos.trailPeak.toFixed(2)} | recul ${(pullback*100).toFixed(2)}% (seuil ${(TRAIL_PULLBACK*100).toFixed(1)}%) | PnL ${(pct*100).toFixed(2)}% (plancher ${(ROUND_TRIP_FEES*100).toFixed(1)}%) — position conservée`);
-        return;
-      }
-
-      if (r > bot.rsi_sell) {
-        console.log(`⏸ RSI haut (${r}) mais PnL ${(pct*100).toFixed(2)}% ≤ frais (+0.2%) — position conservée (sortie: TP ou SL uniquement)`);
-      }
-      return;
+    // Demander à Claude
+    const decision = await askClaudeForTradingDecisions(bot, marketData, '');
+    
+    if (decision.shortTerm || decision.mediumTerm || decision.longTerm) {
+      await executeClaudeDecision(bot, decision, price);
     }
 
-    // ── Condition de base : RSI bas + momentum EMA9 qui repart à la hausse ──
-    const conditionBase = r < bot.rsi_buy && e9Rising;
+    // Vérifier positions existantes pour fermetures
+    const activeHorizons = positionManager.getActivePositions(bot.id);
+    for (const horizon of activeHorizons) {
+      const pos = positionManager.getPosition(bot.id, horizon);
+      if (!pos) continue;
 
-    // ── Filtre anti-signal-prématuré : RSI doit remonter, confirmé 1 cycle (plus réactif) ──
-    const CONFIRM_CYCLES_REQUIRED = 1;
-    if (conditionBase && rsiRebondit) {
-      state.confirmCount++;
-    } else {
-      state.confirmCount = 0;
+      const pnlPercent = ((price - pos.entryPrice) / pos.entryPrice) * 100;
+
+      if (price >= pos.tp) {
+        console.log(`🎯 PRISE PROFIT ${horizon.toUpperCase()}: ${bot.name} @ $${price} | PnL: +${pnlPercent.toFixed(2)}%`);
+        applyTradePnl(bot, pos.capital * (pnlPercent / 100));
+        positionManager.removePosition(bot.id, horizon);
+      } else if (price <= pos.sl) {
+        console.log(`🛑 STOP LOSS ${horizon.toUpperCase()}: ${bot.name} @ $${price} | PnL: ${pnlPercent.toFixed(2)}%`);
+        applyTradePnl(bot, pos.capital * (pnlPercent / 100));
+        positionManager.removePosition(bot.id, horizon);
+      }
     }
-    console.log(`🔎 Filtre confirmation: base=${conditionBase} | rebond=${rsiRebondit} | confirmations=${state.confirmCount}/${CONFIRM_CYCLES_REQUIRED}`);
 
-    if (state.confirmCount >= CONFIRM_CYCLES_REQUIRED) {
-      const tSignal = Date.now(); // ── début du chrono: signal confirmé, avant exécution ──
-      const bal = await getBalance();
-      const capitalNeeded = getBotEquity(bot);
-      if (bal < capitalNeeded) { console.log(`⚠️ Solde insuffisant: $${bal.toFixed(2)} < $${capitalNeeded.toFixed(2)} requis (capital composé)`); return; }
-
-      // ── VALIDATION PAR CLAUDE IA ──
-      const first = candles[0].c;
-      const chg24h = (((price - first) / first) * 100).toFixed(2);
-      const lastCloses = candles.slice(-5).map(c => c.c);
-      const recentHistory = getRecentHistorySummary(bot.id);
-      const ctx = { price, rsi: r, rsiPrev, e9, e21, e9Rising, chg24h, lastCloses, recentHistory };
-      let verdict;
-      if (aiState.enabled) {
-        console.log(`🧠 Signal confirmé (2/2) — consultation de Claude IA...`);
-        verdict = await askClaude(bot, ctx);
-      } else {
-        console.log(`⏸ Validation IA en pause — règles RSI seules`);
-        verdict = { decision: 'CONFIRM', reason: 'Validation IA en pause — signal RSI confirmé appliqué directement' };
-      }
-      console.log(`🧠 Claude: ${verdict.decision}${verdict.confidence ? ' (' + verdict.confidence + '%)' : ''} — ${verdict.reason}`);
-      recordDecision(bot, ctx, verdict);
-      if (verdict.decision === 'REJECT') {
-        console.log(`🛑 Entrée rejetée par l'IA — le bot attend un meilleur signal | temps total: ${Date.now() - tSignal}ms`);
-        state.confirmCount = 0;
-        return;
-      }
-
-      const o = await buySpot(bot, price);
-      if (o) { positions.set(bot.id, { ...o, openedAt: new Date().toISOString(), aiReason: verdict.reason }); savePositions(); }
-      console.log(`⏱️ Temps total signal → exécution: ${Date.now() - tSignal}ms`);
-      state.confirmCount = 0;
-    } else {
-      console.log(`⏳ Pas de signal confirmé (RSI=${r}, cible <${bot.rsi_buy})`);
+    const status = positionManager.statusForBot(bot.id);
+    if (status.activeCount > 0) {
+      console.log(`📈 Positions actives: ${status.details.join(' | ')}`);
     }
   } catch (e) {
     console.error(`❌ ${bot.name}:`, e.message);
@@ -465,53 +258,37 @@ async function runBot(bot) {
 }
 
 async function startTradingEngine() {
-  console.log('\n🚀 NexTrade AI — Moteur SPOT Bybit démarré (Buy Low / Sell High)');
-  console.log('🧠 Claude Control — ACTIVÉ (contrôle avancé des bots)');
-  loadPositions(); // ── restaure les positions ouvertes avant précédent redéploiement ──
-  loadDecisions(); // ── restaure l'historique des décisions IA (audit) ──
-  loadEquity();    // ── restaure le capital composé par bot ──
-  loadCommandHistory(); // ── charge l'historique des commandes Claude ──
-  loadTradesLog(); // ── charge les décisions trading autonomes de Claude ──
+  console.log('\n🚀 NexTrade AI ADVANCED — Moteur Multi-Horizon');
+  console.log('🧠 Claude Control — MULTI-HORIZON (Court/Moyen/Long Terme)');
+  
+  loadEquity();
+  loadDecisions();
+
   try {
     const bal = await getBalance();
     console.log(`💰 Solde Bybit: $${bal.toFixed(2)} USDT`);
-  } catch(e) {
+  } catch (e) {
     console.error('❌ Connexion Bybit:', e.message);
-    console.log('💡 Si "blocage géographique": changez la région Railway vers EU West (Settings → Region)');
   }
-  
+
   const cycle = async () => {
-    console.log('\n⏰ Cycle trading:', new Date().toLocaleString('fr-FR'));
+    console.log('\n⏰ Cycle:', new Date().toLocaleString('fr-FR'));
     for (const bot of BOTS.filter(b => b.active)) {
       await runBot(bot);
       await new Promise(r => setTimeout(r, 1500));
     }
   };
-  
-  const claudeControlCycle = async () => {
-    console.log('\n🧠 Cycle contrôle Claude:', new Date().toLocaleString('fr-FR'));
-    try {
-      const command = await askClaudeForControl(
-        BOTS,
-        positions,
-        decisionHistory,
-        botEquity
-      );
-      
-      if (command.action && command.action !== 'NONE') {
-        await executeClaudeCommand(command, BOTS, module.exports);
-      }
-    } catch (e) {
-      console.error('❌ Erreur cycle Claude:', e.message);
-    }
-  };
-  
+
   await cycle();
-  setInterval(cycle, 15 * 60 * 1000);
-  
-  // Exécuter Claude Control après le premier cycle, puis toutes les 15 min
-  await claudeControlCycle();
-  setInterval(claudeControlCycle, 15 * 60 * 1000);
+  setInterval(cycle, 15 * 60 * 1000); // Toutes les 15 min
 }
 
-module.exports = { startTradingEngine, BOTS, positions, api, getBalance, getPrice, lastVerdicts, aiState, signalState, decisionHistory: () => decisionHistory, askClaude, getBotEquity, CIRCUIT_BREAKER_DRAWDOWN };
+module.exports = {
+  startTradingEngine,
+  BOTS,
+  positionManager,
+  api,
+  getBalance,
+  getPrice,
+  getBotEquity,
+};
