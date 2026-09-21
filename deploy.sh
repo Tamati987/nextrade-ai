@@ -6,8 +6,8 @@
 echo "🚀 NexTrade AI — Déploiement Multi-Horizon"
 echo "==========================================="
 
-# Vérifier quelle version utiliser (défaut: ADVANCED)
-USE_ADVANCED=${USE_ADVANCED:-true}
+# Vérifier quelle version utiliser (défaut: SIMPLE - STABLE)
+USE_ADVANCED=${USE_ADVANCED:-false}
 
 if [ "$USE_ADVANCED" = "true" ]; then
   echo "✅ Mode: AVANCÉ (Multi-Horizon)"
