@@ -188,8 +188,8 @@ const BOTS = [
   // solde total limité (~22$) partagé entre les 5 bots. qtyDec choisi conservateur (précision
   // Bybit non vérifiable depuis cet environnement sans accès réseau) — à confirmer sur les
   // premiers trades réels, ajuster si Bybit rejette une quantité.
-  { id:'sol',  name:'Sol Momentum',  symbol:'SOLUSDT',  capital:3, rsi_buy:35, rsi_sell:68, tp:0.05, sl:0.02, active:true, interval:'15', qtyDec:2 },
-  { id:'xrp',  name:'XRP Surge',     symbol:'XRPUSDT',  capital:3, rsi_buy:35, rsi_sell:68, tp:0.05, sl:0.02, active:true, interval:'15', qtyDec:1 },
+  { id:'sol',  name:'Sol Momentum',  symbol:'SOLUSDT',  capital:5, rsi_buy:35, rsi_sell:68, tp:0.05, sl:0.02, active:true, interval:'15', qtyDec:2 },
+  { id:'xrp',  name:'XRP Surge',     symbol:'XRPUSDT',  capital:5, rsi_buy:35, rsi_sell:68, tp:0.05, sl:0.02, active:true, interval:'15', qtyDec:1 },
 ];
 
 const positions = new Map();
