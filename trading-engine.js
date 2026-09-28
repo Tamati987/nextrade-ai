@@ -180,9 +180,9 @@ function getRecentHistorySummary(botId, n = 3) {
 // SPOT uniquement : achat bas → vente haute (pas de short, pas de levier)
 // Capital adapté à ~22 USDT au total
 const BOTS = [
-  { id:'gold', name:'Gold Sentinel', symbol:'XAUTUSDT', capital:7, rsi_buy:42, rsi_sell:60, tp:0.02, sl:0.015, active:true, interval:'15', qtyDec:5 },
-  { id:'btc',  name:'Alpha RSI',     symbol:'BTCUSDT',  capital:7, rsi_buy:40, rsi_sell:62, tp:0.02, sl:0.015, active:true, interval:'15', qtyDec:6 },
-  { id:'eth',  name:'Grid ETH',      symbol:'ETHUSDT',  capital:7, rsi_buy:43, rsi_sell:58, tp:0.02, sl:0.015, active:true, interval:'15', qtyDec:5 },
+  { id:'gold', name:'Gold Sentinel', symbol:'XAUTUSDT', capital:7, rsi_buy:42, rsi_sell:60, tp:0.03, sl:0.02, active:true, interval:'15', qtyDec:5 },
+  { id:'btc',  name:'Alpha RSI',     symbol:'BTCUSDT',  capital:7, rsi_buy:40, rsi_sell:62, tp:0.03, sl:0.02, active:true, interval:'15', qtyDec:6 },
+  { id:'eth',  name:'Grid ETH',      symbol:'ETHUSDT',  capital:7, rsi_buy:43, rsi_sell:58, tp:0.03, sl:0.02, active:true, interval:'15', qtyDec:5 },
   // Nouvelles paires : capital réduit ($3) tant qu'elles n'ont pas fait leurs preuves, et vu le
   // solde total limité (~22$) partagé entre les 5 bots. qtyDec choisi conservateur (précision
   // Bybit non vérifiable depuis cet environnement sans accès réseau) — à confirmer sur les
@@ -493,7 +493,7 @@ async function runBot(bot) {
 
 async function startTradingEngine() {
   console.log('\n🚀 NexTrade AI — Moteur SPOT Bybit démarré (Buy Low / Sell High)');
-  console.log('🧠 Claude Control — ACTIVÉ (contrôle avancé des bots)');
+  console.log('🧠 Validation Claude des achats — ACTIVE | Claude Control (pilotage autonome) — DÉSACTIVÉ');
   loadPositions(); // ── restaure les positions ouvertes avant précédent redéploiement ──
   loadDecisions(); // ── restaure l'historique des décisions IA (audit) ──
   loadEquity();    // ── restaure le capital composé par bot ──
@@ -534,10 +534,11 @@ async function startTradingEngine() {
   
   await cycle();
   setInterval(cycle, 15 * 60 * 1000);
-  
-  // Exécuter Claude Control après le premier cycle, puis toutes les 15 min
-  await claudeControlCycle();
-  setInterval(claudeControlCycle, 15 * 60 * 1000);
+
+  // Claude Control DÉSACTIVÉ : le cycle plantait à chaque exécution ("decisions is not a function")
+  // et l'activer donnerait à l'IA le pouvoir de pauser/fermer/modifier les bots seule.
+  // Pour le réactiver un jour : passer `() => decisionHistory` à askClaudeForControl, puis rappeler
+  // claudeControlCycle() + setInterval ici.
 }
 
 module.exports = { startTradingEngine, BOTS, positions, api, getBalance, getPrice, lastVerdicts, aiState, signalState, decisionHistory: () => decisionHistory, askClaude, getBotEquity, CIRCUIT_BREAKER_DRAWDOWN };
