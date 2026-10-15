@@ -372,6 +372,78 @@ async function sellSpot(bot, price) {
   return pnl;
 }
 
+// ── Gestion de sortie d'une position ouverte (TP / SL / stop suiveur) ──
+// Appelée par le cycle 15 min (verbose) ET par la surveillance rapide 1 min (logs seulement sur événement).
+// r = dernier RSI connu (le RSI 15 min ne change pas entre deux cycles).
+async function manageExit(bot, pos, price, r, verbose) {
+  const state = getSignalState(bot.id);
+  const pct = (price - pos.price) / pos.price;
+  const ROUND_TRIP_FEES = 0.002;  // ~0.1% achat + 0.1% vente
+  const TRAIL_PULLBACK  = 0.004;  // recul depuis le plus haut qui déclenche la vente une fois le stop suiveur armé
+  const tag = verbose ? '' : `⚡ [surveillance 1 min] ${bot.name} | $${price} | `;
+  if (verbose) console.log(`📈 Position achetée @ $${pos.price} | PnL: ${(pct*100).toFixed(2)}%`);
+  if (pct >= bot.tp)  { console.log(`${tag}🎯 Take Profit! (PnL ${(pct*100).toFixed(2)}%)`); await sellSpot(bot, price); state.confirmCount = 0; return; }
+  if (pct <= -bot.sl) { console.log(`${tag}🛑 Stop Loss! (PnL ${(pct*100).toFixed(2)}%)`);   await sellSpot(bot, price); state.confirmCount = 0; return; }
+
+  // ── Stop suiveur : au lieu de vendre dès le croisement RSI, on arme un trailing stop
+  // pour laisser courir les gagnants au-delà du simple signal RSI, sans dépasser le TP.
+  if (!pos.trailPeak && r != null && r > bot.rsi_sell && pct > ROUND_TRIP_FEES) {
+    pos.trailPeak = price;
+    savePositions();
+    console.log(`${tag}📡 RSI haut (${r}) + profit net ${(pct*100).toFixed(2)}% — stop suiveur armé @ $${price}`);
+    return;
+  }
+  if (pos.trailPeak) {
+    if (price > pos.trailPeak) { pos.trailPeak = price; savePositions(); }
+    const pullback = (pos.trailPeak - price) / pos.trailPeak;
+    // ── Plancher de rentabilité : une fois le stop suiveur armé, si le prix retombe au
+    // seuil de rentabilité (frais) avant d'avoir reculé de 0.4% depuis le sommet, on vend
+    // quand même immédiatement.
+    if (pullback >= TRAIL_PULLBACK || pct <= ROUND_TRIP_FEES) {
+      const reason = pullback >= TRAIL_PULLBACK
+        ? `recul de ${(pullback*100).toFixed(2)}% depuis le plus haut $${pos.trailPeak.toFixed(2)}`
+        : `retombé au plancher de rentabilité (PnL ${(pct*100).toFixed(2)}% ≤ frais ${(ROUND_TRIP_FEES*100).toFixed(1)}%)`;
+      console.log(`${tag}🔄 Stop suiveur déclenché — ${reason} → vente`);
+      await sellSpot(bot, price); state.confirmCount = 0; return;
+    }
+    if (verbose) console.log(`📡 Stop suiveur actif — plus haut $${pos.trailPeak.toFixed(2)} | recul ${(pullback*100).toFixed(2)}% (seuil ${(TRAIL_PULLBACK*100).toFixed(1)}%) | PnL ${(pct*100).toFixed(2)}% (plancher ${(ROUND_TRIP_FEES*100).toFixed(1)}%) — position conservée`);
+    return;
+  }
+
+  if (verbose && r > bot.rsi_sell) {
+    console.log(`⏸ RSI haut (${r}) mais PnL ${(pct*100).toFixed(2)}% ≤ frais (+0.2%) — position conservée (sortie: TP ou SL uniquement)`);
+  }
+}
+
+// ── Verrou par bot : empêche le cycle 15 min et la surveillance 1 min de vendre en même temps ──
+const botLocks = new Set();
+async function withBotLock(bot, fn) {
+  if (botLocks.has(bot.id)) return;
+  botLocks.add(bot.id);
+  try { return await fn(); } finally { botLocks.delete(bot.id); }
+}
+
+// ── Surveillance rapide : toutes les minutes, vérifie seulement les positions ouvertes ──
+// (les achats restent sur le cycle 15 min). Ne consomme aucun appel Claude.
+async function monitorPositions() {
+  for (const bot of BOTS.filter(b => b.active)) {
+    const pos = positions.get(bot.id);
+    if (!pos) continue;
+    await withBotLock(bot, async () => {
+      try {
+        const current = positions.get(bot.id);
+        if (!current) return;
+        const price = await getPrice(bot.symbol);
+        const hist = getSignalState(bot.id).rsiHistory;
+        const lastRsi = hist.length ? hist[hist.length - 1] : null;
+        await manageExit(bot, current, price, lastRsi, false);
+      } catch (e) {
+        console.error(`❌ Surveillance ${bot.name}:`, e.message);
+      }
+    });
+  }
+}
+
 async function runBot(bot) {
   try {
     const candles = await getCandles(bot.symbol, bot.interval);
@@ -399,43 +471,7 @@ async function runBot(bot) {
     console.log(`\n📊 ${bot.name} | $${price} | RSI:${r} (préc. ${rsiPrev}) | EMA9:${e9.toFixed(2)}${e9Rising?' ↑':''} | EMA21:${e21.toFixed(2)}`);
 
     if (pos) {
-      const pct = (price - pos.price) / pos.price;
-      const ROUND_TRIP_FEES = 0.002;  // ~0.1% achat + 0.1% vente
-      const TRAIL_PULLBACK  = 0.004;  // recul depuis le plus haut qui déclenche la vente une fois le stop suiveur armé
-      console.log(`📈 Position achetée @ $${pos.price} | PnL: ${(pct*100).toFixed(2)}%`);
-      if (pct >= bot.tp)  { console.log('🎯 Take Profit!'); await sellSpot(bot, price); state.confirmCount = 0; return; }
-      if (pct <= -bot.sl) { console.log('🛑 Stop Loss!');   await sellSpot(bot, price); state.confirmCount = 0; return; }
-
-      // ── Stop suiveur : au lieu de vendre dès le croisement RSI, on arme un trailing stop
-      // pour laisser courir les gagnants au-delà du simple signal RSI, sans dépasser le TP.
-      if (!pos.trailPeak && r > bot.rsi_sell && pct > ROUND_TRIP_FEES) {
-        pos.trailPeak = price;
-        savePositions();
-        console.log(`📡 RSI haut (${r}) + profit net ${(pct*100).toFixed(2)}% — stop suiveur armé @ $${price}`);
-        return;
-      }
-      if (pos.trailPeak) {
-        if (price > pos.trailPeak) { pos.trailPeak = price; savePositions(); }
-        const pullback = (pos.trailPeak - price) / pos.trailPeak;
-        // ── Plancher de rentabilité : une fois le stop suiveur armé, si le prix retombe au
-        // seuil de rentabilité (frais) avant d'avoir reculé de 0.4% depuis le sommet, on vend
-        // quand même immédiatement. Sans ce plancher, un sommet atteint juste au-dessus du seuil
-        // d'armement (0.2%) laissait le recul de 0.4% faire retomber le trade sous le prix d'achat
-        // — une position "protégée" pouvait finir en perte malgré le stop suiveur.
-        if (pullback >= TRAIL_PULLBACK || pct <= ROUND_TRIP_FEES) {
-          const reason = pullback >= TRAIL_PULLBACK
-            ? `recul de ${(pullback*100).toFixed(2)}% depuis le plus haut $${pos.trailPeak.toFixed(2)}`
-            : `retombé au plancher de rentabilité (PnL ${(pct*100).toFixed(2)}% ≤ frais ${(ROUND_TRIP_FEES*100).toFixed(1)}%)`;
-          console.log(`🔄 Stop suiveur déclenché — ${reason} → vente`);
-          await sellSpot(bot, price); state.confirmCount = 0; return;
-        }
-        console.log(`📡 Stop suiveur actif — plus haut $${pos.trailPeak.toFixed(2)} | recul ${(pullback*100).toFixed(2)}% (seuil ${(TRAIL_PULLBACK*100).toFixed(1)}%) | PnL ${(pct*100).toFixed(2)}% (plancher ${(ROUND_TRIP_FEES*100).toFixed(1)}%) — position conservée`);
-        return;
-      }
-
-      if (r > bot.rsi_sell) {
-        console.log(`⏸ RSI haut (${r}) mais PnL ${(pct*100).toFixed(2)}% ≤ frais (+0.2%) — position conservée (sortie: TP ou SL uniquement)`);
-      }
+      await manageExit(bot, pos, price, r, true);
       return;
     }
 
@@ -509,7 +545,7 @@ async function startTradingEngine() {
   const cycle = async () => {
     console.log('\n⏰ Cycle trading:', new Date().toLocaleString('fr-FR'));
     for (const bot of BOTS.filter(b => b.active)) {
-      await runBot(bot);
+      await withBotLock(bot, () => runBot(bot));
       await new Promise(r => setTimeout(r, 1500));
     }
   };
@@ -534,6 +570,8 @@ async function startTradingEngine() {
   
   await cycle();
   setInterval(cycle, 15 * 60 * 1000);
+  setInterval(monitorPositions, 60 * 1000);
+  console.log('⚡ Surveillance des positions ouvertes : toutes les 60 s (TP / SL / stop suiveur)');
 
   // Claude Control DÉSACTIVÉ : le cycle plantait à chaque exécution ("decisions is not a function")
   // et l'activer donnerait à l'IA le pouvoir de pauser/fermer/modifier les bots seule.
@@ -541,4 +579,4 @@ async function startTradingEngine() {
   // claudeControlCycle() + setInterval ici.
 }
 
-module.exports = { startTradingEngine, BOTS, positions, api, getBalance, getPrice, lastVerdicts, aiState, signalState, decisionHistory: () => decisionHistory, askClaude, getBotEquity, CIRCUIT_BREAKER_DRAWDOWN };
+module.exports = { startTradingEngine, monitorPositions, BOTS, positions, api, getBalance, getPrice, lastVerdicts, aiState, signalState, decisionHistory: () => decisionHistory, askClaude, getBotEquity, CIRCUIT_BREAKER_DRAWDOWN };
