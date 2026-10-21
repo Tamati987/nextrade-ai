@@ -14,14 +14,43 @@ const PORT = process.env.PORT || 3000;
 let stripe;
 try { stripe = require('stripe')(process.env.STRIPE_SECRET_KEY); } catch(e) {}
 
-app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+const crypto = require('crypto');
+// Secrets : jamais de valeur par défaut connue (le dépôt est public)
+const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(48).toString('hex');
+app.set('trust proxy', 1);
+// En-têtes de sécurité
+app.use((req, res, next) => {
+  res.set({
+    'X-Content-Type-Options': 'nosniff',
+    'X-Frame-Options': 'DENY',
+    'Referrer-Policy': 'strict-origin-when-cross-origin',
+    'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
+    'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
+    'Content-Security-Policy': "frame-ancestors 'none'; base-uri 'self'; object-src 'none'",
+  });
+  res.removeHeader('X-Powered-By');
+  next();
+});
+// Limiteur de requêtes simple (par IP, fenêtre d'une minute)
+const RL = new Map();
+function rateLimit(name, max, windowMs = 60000) {
+  return (req, res, next) => {
+    const key = name + '|' + req.ip, now = Date.now();
+    let b = RL.get(key);
+    if (!b || now - b.t > windowMs) { b = { t: now, c: 0 }; RL.set(key, b); }
+    if (++b.c > max) return res.status(429).json({ ok: false, error: 'Trop de requêtes, réessaie plus tard.' });
+    if (RL.size > 20000) for (const [k, v] of RL) if (now - v.t > windowMs) RL.delete(k);
+    next();
+  };
+}
+app.use('/api/', rateLimit('api', 120));
+app.use(express.json({ limit: '100kb' }));
+app.use(express.urlencoded({ extended: true, limit: '100kb' }));
 app.use(session({
-  secret: process.env.SESSION_SECRET || 'nextrade-secret-2026',
+  secret: process.env.SESSION_SECRET || crypto.randomBytes(48).toString('hex'),
   resave: false,
   saveUninitialized: false,
-  cookie: { secure: false, maxAge: 7 * 24 * 60 * 60 * 1000 }
+  cookie: { secure: 'auto', httpOnly: true, sameSite: 'lax', maxAge: 7 * 24 * 60 * 60 * 1000 }
 }));
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -34,7 +63,7 @@ function requireAuth(req, res, next) {
   const token = req.headers.authorization?.split(' ')[1] || req.session.token;
   if (!token) return res.status(401).json({ error: 'Non authentifié' });
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'jwt-secret-2026');
+    const decoded = jwt.verify(token, JWT_SECRET);
     req.user = decoded;
     next();
   } catch { res.status(401).json({ error: 'Token invalide' }); }
@@ -43,10 +72,10 @@ function requireAuth(req, res, next) {
 // ── ADMINISTRATEUR (protège les contrôles + données privées) ──
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 function isAdmin(req) {
-  if (!ADMIN_PASSWORD) return true; // Pas encore configuré → mode ouvert (ajoutez ADMIN_PASSWORD sur Railway !)
+  if (!ADMIN_PASSWORD) return false; // Pas configuré → tout est verrouillé (ajoutez ADMIN_PASSWORD sur Railway)
   const token = (req.headers.authorization || '').replace('Bearer ', '') || req.headers['x-admin-token'] || '';
   if (!token) return false;
-  try { return !!jwt.verify(token, process.env.JWT_SECRET || 'jwt-secret-2026').admin; }
+  try { return !!jwt.verify(token, JWT_SECRET).admin; }
   catch(e) { return false; }
 }
 function requireAdmin(req, res, next) {
@@ -54,10 +83,15 @@ function requireAdmin(req, res, next) {
   res.status(401).json({ ok: false, error: 'Réservé à l\'administrateur' });
 }
 
-app.post('/api/admin/login', (req, res) => {
+function sameSecret(a, b) {
+  const x = crypto.createHash('sha256').update(String(a || '')).digest();
+  const y = crypto.createHash('sha256').update(String(b || '')).digest();
+  return crypto.timingSafeEqual(x, y);
+}
+app.post('/api/admin/login', rateLimit('login', 5, 15 * 60000), (req, res) => {
   if (!ADMIN_PASSWORD) return res.json({ ok: false, error: 'ADMIN_PASSWORD non configuré dans Railway → Variables' });
-  if (req.body && req.body.password === ADMIN_PASSWORD) {
-    const token = jwt.sign({ admin: true }, process.env.JWT_SECRET || 'jwt-secret-2026', { expiresIn: '30d' });
+  if (req.body && sameSecret(req.body.password, ADMIN_PASSWORD)) {
+    const token = jwt.sign({ admin: true }, JWT_SECRET, { expiresIn: '30d' });
     console.log('🔐 Connexion administrateur réussie');
     return res.json({ ok: true, token });
   }
@@ -76,23 +110,23 @@ function requireSubscription(req, res, next) {
 }
 
 // ── AUTH ROUTES ──
-app.post('/api/auth/register', async (req, res) => {
+app.post('/api/auth/register', rateLimit('register', 5, 15 * 60000), async (req, res) => {
   const { email, password, name } = req.body;
   if (!email || !password) return res.status(400).json({ error: 'Email et mot de passe requis' });
   if (users.has(email)) return res.status(409).json({ error: 'Email déjà utilisé' });
   const hash = await bcrypt.hash(password, 10);
   users.set(email, { email, name: name || email, password: hash, createdAt: new Date() });
-  const token = jwt.sign({ email, name }, process.env.JWT_SECRET || 'jwt-secret-2026', { expiresIn: '7d' });
+  const token = jwt.sign({ email, name }, JWT_SECRET, { expiresIn: '7d' });
   res.json({ token, user: { email, name } });
 });
 
-app.post('/api/auth/login', async (req, res) => {
+app.post('/api/auth/login', rateLimit('login', 5, 15 * 60000), async (req, res) => {
   const { email, password } = req.body;
   const user = users.get(email);
   if (!user) return res.status(401).json({ error: 'Email ou mot de passe incorrect' });
   const ok = await bcrypt.compare(password, user.password);
   if (!ok) return res.status(401).json({ error: 'Email ou mot de passe incorrect' });
-  const token = jwt.sign({ email, name: user.name }, process.env.JWT_SECRET || 'jwt-secret-2026', { expiresIn: '7d' });
+  const token = jwt.sign({ email, name: user.name }, JWT_SECRET, { expiresIn: '7d' });
   const sub = subscriptions.get(email);
   res.json({ token, user: { email, name: user.name }, subscription: sub || null });
 });
@@ -204,7 +238,7 @@ app.post('/api/paypal/activate', requireAuth, async (req, res) => {
 });
 
 // ── CLAUDE API PROXY ──
-app.post('/api/chat', async (req, res) => {
+app.post('/api/chat', requireAdmin, rateLimit('chat', 20), async (req, res) => {
   const { messages } = req.body;
   if (!messages) return res.status(400).json({ error: 'Messages requis' });
   try {
@@ -267,7 +301,7 @@ app.get('/api/market', (req, res) => {
 });
 
 // ── HEALTH ──
-app.get('/health', (req, res) => res.json({ status: 'ok', users: users.size, subscriptions: subscriptions.size }));
+app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
 // ── DONNÉES RÉELLES BYBIT ──
 app.get('/api/real/summary', async (req, res) => {
@@ -327,7 +361,7 @@ app.get('/api/real/verdicts/history', (req, res) => {
 });
 
 // ── VALIDATION IA POUR LE PAPER TRADING (réutilise exactement askClaude() du vrai moteur — même prompt, aucune duplication) ──
-app.post('/api/paper/validate', async (req, res) => {
+app.post('/api/paper/validate', rateLimit('paper', 6), async (req, res) => {
   try {
     const { askClaude } = require('./trading-engine');
     const { symbol, name, rsi_buy, capital, tp, sl, price, rsi, rsiPrev, e9, e21, chg24h, lastCloses } = req.body || {};

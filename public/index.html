@@ -869,8 +869,8 @@ async function sendMsg() {
     // Try backend first, fallback to direct API
     let reply;
     try {
-      const r=await fetch(`${API_BASE}/api/chat`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages:chatHistory})});
-      if(r.ok){const d=await r.json();reply=d.reply;}
+      const r=await fetch(`${API_BASE}/api/chat`,{method:'POST',headers:{'Content-Type':'application/json',...adminHeaders()},body:JSON.stringify({messages:chatHistory})});
+      if(r.ok){const d=await r.json();reply=d.reply;}else if(r.status===401){reply='🔒 Connecte-toi en administrateur pour utiliser l’assistant.';}
     } catch(e){}
 
     if(!reply) {
