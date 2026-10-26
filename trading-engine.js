@@ -180,9 +180,9 @@ function getRecentHistorySummary(botId, n = 3) {
 // SPOT uniquement : achat bas → vente haute (pas de short, pas de levier)
 // Capital adapté à ~22 USDT au total
 const BOTS = [
-  { id:'gold', name:'Gold Sentinel', symbol:'XAUTUSDT', capital:7, rsi_buy:42, rsi_sell:60, tp:0.03, sl:0.02, active:true, interval:'15', qtyDec:5 },
-  { id:'btc',  name:'Alpha RSI',     symbol:'BTCUSDT',  capital:7, rsi_buy:40, rsi_sell:62, tp:0.03, sl:0.02, active:true, interval:'15', qtyDec:6 },
-  { id:'eth',  name:'Grid ETH',      symbol:'ETHUSDT',  capital:7, rsi_buy:43, rsi_sell:58, tp:0.03, sl:0.02, active:true, interval:'15', qtyDec:5 },
+  { id:'gold', name:'Gold Sentinel', symbol:'XAUTUSDT', capital:7, rsi_buy:42, rsi_sell:60, tp:0.015, sl:0.01, active:true, interval:'15', qtyDec:5 },
+  { id:'btc',  name:'Alpha RSI',     symbol:'BTCUSDT',  capital:7, rsi_buy:40, rsi_sell:62, tp:0.015, sl:0.01, active:true, interval:'15', qtyDec:6 },
+  { id:'eth',  name:'Grid ETH',      symbol:'ETHUSDT',  capital:7, rsi_buy:43, rsi_sell:58, tp:0.015, sl:0.01, active:false, /* coupé le 25/10/2026 : 4 stop loss d'affilée */ interval:'15', qtyDec:5 },
   // Nouvelles paires : capital réduit ($3) tant qu'elles n'ont pas fait leurs preuves, et vu le
   // solde total limité (~22$) partagé entre les 5 bots. qtyDec choisi conservateur (précision
   // Bybit non vérifiable depuis cet environnement sans accès réseau) — à confirmer sur les
@@ -380,6 +380,8 @@ async function manageExit(bot, pos, price, r, verbose) {
   const pct = (price - pos.price) / pos.price;
   const ROUND_TRIP_FEES = 0.002;  // ~0.1% achat + 0.1% vente
   const TRAIL_PULLBACK  = 0.004;  // recul depuis le plus haut qui déclenche la vente une fois le stop suiveur armé
+  const TRAIL_ARM       = 0.008;  // le stop suiveur ne s'arme qu'à +0.8% (sinon les « gains » sortaient à ~0 $ net)
+  const PROFIT_FLOOR    = 0.006;  // plancher : +0.6% brut ≈ +0.4% net après frais
   const tag = verbose ? '' : `⚡ [surveillance 1 min] ${bot.name} | $${price} | `;
   if (verbose) console.log(`📈 Position achetée @ $${pos.price} | PnL: ${(pct*100).toFixed(2)}%`);
   if (pct >= bot.tp)  { console.log(`${tag}🎯 Take Profit! (PnL ${(pct*100).toFixed(2)}%)`); await sellSpot(bot, price); state.confirmCount = 0; return; }
@@ -387,7 +389,7 @@ async function manageExit(bot, pos, price, r, verbose) {
 
   // ── Stop suiveur : au lieu de vendre dès le croisement RSI, on arme un trailing stop
   // pour laisser courir les gagnants au-delà du simple signal RSI, sans dépasser le TP.
-  if (!pos.trailPeak && r != null && r > bot.rsi_sell && pct > ROUND_TRIP_FEES) {
+  if (!pos.trailPeak && r != null && r > bot.rsi_sell && pct >= TRAIL_ARM) {
     pos.trailPeak = price;
     savePositions();
     console.log(`${tag}📡 RSI haut (${r}) + profit net ${(pct*100).toFixed(2)}% — stop suiveur armé @ $${price}`);
@@ -399,19 +401,19 @@ async function manageExit(bot, pos, price, r, verbose) {
     // ── Plancher de rentabilité : une fois le stop suiveur armé, si le prix retombe au
     // seuil de rentabilité (frais) avant d'avoir reculé de 0.4% depuis le sommet, on vend
     // quand même immédiatement.
-    if (pullback >= TRAIL_PULLBACK || pct <= ROUND_TRIP_FEES) {
+    if (pullback >= TRAIL_PULLBACK || pct <= PROFIT_FLOOR) {
       const reason = pullback >= TRAIL_PULLBACK
         ? `recul de ${(pullback*100).toFixed(2)}% depuis le plus haut $${pos.trailPeak.toFixed(2)}`
-        : `retombé au plancher de rentabilité (PnL ${(pct*100).toFixed(2)}% ≤ frais ${(ROUND_TRIP_FEES*100).toFixed(1)}%)`;
+        : `retombé au plancher de profit (PnL ${(pct*100).toFixed(2)}% ≤ ${(PROFIT_FLOOR*100).toFixed(1)}%)`;
       console.log(`${tag}🔄 Stop suiveur déclenché — ${reason} → vente`);
       await sellSpot(bot, price); state.confirmCount = 0; return;
     }
-    if (verbose) console.log(`📡 Stop suiveur actif — plus haut $${pos.trailPeak.toFixed(2)} | recul ${(pullback*100).toFixed(2)}% (seuil ${(TRAIL_PULLBACK*100).toFixed(1)}%) | PnL ${(pct*100).toFixed(2)}% (plancher ${(ROUND_TRIP_FEES*100).toFixed(1)}%) — position conservée`);
+    if (verbose) console.log(`📡 Stop suiveur actif — plus haut $${pos.trailPeak.toFixed(2)} | recul ${(pullback*100).toFixed(2)}% (seuil ${(TRAIL_PULLBACK*100).toFixed(1)}%) | PnL ${(pct*100).toFixed(2)}% (plancher ${(PROFIT_FLOOR*100).toFixed(1)}%) — position conservée`);
     return;
   }
 
   if (verbose && r > bot.rsi_sell) {
-    console.log(`⏸ RSI haut (${r}) mais PnL ${(pct*100).toFixed(2)}% ≤ frais (+0.2%) — position conservée (sortie: TP ou SL uniquement)`);
+    console.log(`⏸ RSI haut (${r}) mais PnL ${(pct*100).toFixed(2)}% < seuil stop suiveur (+0.8%) — position conservée (sortie: TP ou SL uniquement)`);
   }
 }
 
