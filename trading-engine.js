@@ -102,9 +102,9 @@ function recordDecision(bot, ctx, verdict) {
 // SPOT uniquement : achat bas → vente haute (pas de short, pas de levier)
 // Capital adapté à ~22 USDT au total
 const BOTS = [
-  { id:'gold', name:'Gold Sentinel', symbol:'XAUTUSDT', capital:7, rsi_buy:38, rsi_sell:65, tp:0.025, sl:0.02, active:true, interval:'15', qtyDec:5 },
-  { id:'btc',  name:'Alpha RSI',     symbol:'BTCUSDT',  capital:7, rsi_buy:35, rsi_sell:68, tp:0.030, sl:0.02, active:true, interval:'15', qtyDec:6 },
-  { id:'eth',  name:'Grid ETH',      symbol:'ETHUSDT',  capital:7, rsi_buy:40, rsi_sell:62, tp:0.025, sl:0.02, active:true, interval:'15', qtyDec:5 },
+  { id:'gold', name:'Gold Sentinel', symbol:'XAUTUSDT', capital:7, rsi_buy:38, rsi_sell:65, tp:0.05, sl:0.02, active:true, interval:'15', qtyDec:5 },
+  { id:'btc',  name:'Alpha RSI',     symbol:'BTCUSDT',  capital:7, rsi_buy:35, rsi_sell:68, tp:0.05, sl:0.02, active:true, interval:'15', qtyDec:6 },
+  { id:'eth',  name:'Grid ETH',      symbol:'ETHUSDT',  capital:7, rsi_buy:40, rsi_sell:62, tp:0.05, sl:0.02, active:true, interval:'15', qtyDec:5 },
 ];
 
 const positions = new Map();
@@ -306,15 +306,41 @@ async function runBot(bot) {
 
     if (pos) {
       const pct = (price - pos.price) / pos.price;
-      const ROUND_TRIP_FEES = 0.002; // ~0.1% achat + 0.1% vente
+      const ROUND_TRIP_FEES = 0.002;  // ~0.1% achat + 0.1% vente
+      const TRAIL_PULLBACK  = 0.004;  // recul depuis le plus haut qui déclenche la vente une fois le stop suiveur armé
       console.log(`📈 Position achetée @ $${pos.price} | PnL: ${(pct*100).toFixed(2)}%`);
       if (pct >= bot.tp)  { console.log('🎯 Take Profit!'); await sellSpot(bot, price); state.confirmCount = 0; return; }
       if (pct <= -bot.sl) { console.log('🛑 Stop Loss!');   await sellSpot(bot, price); state.confirmCount = 0; return; }
-      if (r > bot.rsi_sell) {
-        if (pct > ROUND_TRIP_FEES) {
-          console.log(`🔄 RSI haut (${r}) + profit net ${(pct*100).toFixed(2)}% → vente`);
+
+      // ── Stop suiveur : au lieu de vendre dès le croisement RSI sur une seule lecture de prix
+      // (risque de vendre à perte si le marché a déjà rechuté entre la décision et l'exécution de
+      // l'ordre), on arme un trailing stop pour laisser courir les gagnants au-delà du simple
+      // signal RSI, sans dépasser le TP.
+      if (!pos.trailPeak && r > bot.rsi_sell && pct > ROUND_TRIP_FEES) {
+        pos.trailPeak = price;
+        savePositions();
+        console.log(`📡 RSI haut (${r}) + profit net ${(pct*100).toFixed(2)}% — stop suiveur armé @ $${price}`);
+        return;
+      }
+      if (pos.trailPeak) {
+        if (price > pos.trailPeak) { pos.trailPeak = price; savePositions(); }
+        const pullback = (pos.trailPeak - price) / pos.trailPeak;
+        // ── Plancher de rentabilité : une fois le stop suiveur armé, si le prix retombe au
+        // seuil de rentabilité (frais) avant d'avoir reculé de 0.4% depuis le sommet, on vend
+        // quand même immédiatement. Sans ce plancher, un sommet atteint juste au-dessus du seuil
+        // d'armement (0.2%) laissait le recul de 0.4% faire retomber le trade sous le prix d'achat.
+        if (pullback >= TRAIL_PULLBACK || pct <= ROUND_TRIP_FEES) {
+          const reason = pullback >= TRAIL_PULLBACK
+            ? `recul de ${(pullback*100).toFixed(2)}% depuis le plus haut $${pos.trailPeak.toFixed(2)}`
+            : `retombé au plancher de rentabilité (PnL ${(pct*100).toFixed(2)}% ≤ frais ${(ROUND_TRIP_FEES*100).toFixed(1)}%)`;
+          console.log(`🔄 Stop suiveur déclenché — ${reason} → vente`);
           await sellSpot(bot, price); state.confirmCount = 0; return;
         }
+        console.log(`📡 Stop suiveur actif — plus haut $${pos.trailPeak.toFixed(2)} | recul ${(pullback*100).toFixed(2)}% (seuil ${(TRAIL_PULLBACK*100).toFixed(1)}%) | PnL ${(pct*100).toFixed(2)}% (plancher ${(ROUND_TRIP_FEES*100).toFixed(1)}%) — position conservée`);
+        return;
+      }
+
+      if (r > bot.rsi_sell) {
         console.log(`⏸ RSI haut (${r}) mais PnL ${(pct*100).toFixed(2)}% ≤ frais (+0.2%) — position conservée (sortie: TP ou SL uniquement)`);
       }
       return;
