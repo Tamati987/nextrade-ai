@@ -180,8 +180,8 @@ function getRecentHistorySummary(botId, n = 3) {
 // SPOT uniquement : achat bas → vente haute (pas de short, pas de levier)
 // Capital adapté à ~22 USDT au total
 const BOTS = [
-  { id:'gold', name:'Gold Sentinel', symbol:'XAUTUSDT', capital:7, rsi_buy:42, rsi_sell:60, tp:0.015, sl:0.01, active:true, interval:'15', qtyDec:5 },
-  { id:'btc',  name:'Alpha RSI',     symbol:'BTCUSDT',  capital:7, rsi_buy:40, rsi_sell:62, tp:0.015, sl:0.01, active:true, interval:'15', qtyDec:6 },
+  { id:'gold', name:'Gold Sentinel', symbol:'XAUTUSDT', capital:7, rsi_buy:42, rsi_sell:60, tp:0.03, sl:0.01, active:true, interval:'15', qtyDec:5 },
+  { id:'btc',  name:'Alpha RSI',     symbol:'BTCUSDT',  capital:7, rsi_buy:40, rsi_sell:62, tp:0.03, sl:0.01, active:true, interval:'15', qtyDec:6 },
   { id:'eth',  name:'Grid ETH',      symbol:'ETHUSDT',  capital:7, rsi_buy:43, rsi_sell:58, tp:0.015, sl:0.01, active:false, /* coupé le 25/10/2026 : 4 stop loss d'affilée */ interval:'15', qtyDec:5 },
   // Nouvelles paires : capital réduit ($3) tant qu'elles n'ont pas fait leurs preuves, et vu le
   // solde total limité (~22$) partagé entre les 5 bots. qtyDec choisi conservateur (précision
