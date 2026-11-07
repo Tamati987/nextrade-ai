@@ -1084,9 +1084,11 @@ async function loadRealData() {
       let html = '';
       for (const b of sumRes.bots) {
         const icon = b.id==='gold' ? '\u{1F947}' : (b.id==='btc' ? '\u20BF' : '\u039E');
-        const status = b.position
-          ? '<span class="tag tag-run">Position @ $'+b.position.price+'</span> <span class="pnl '+((b.pnl||0)>=0?'up':'dn')+'">'+((b.pnl||0)>=0?'+':'')+'$'+(b.pnl||0).toFixed(2)+'</span>'
-          : '<span class="tag tag-pause">En attente d\u2019un signal d\u2019achat</span>';
+        const status = !b.active
+          ? '<span class="tag tag-pause" style="color:var(--red)">\u23f8 En pause</span>'
+          : (b.position
+            ? '<span class="tag tag-run">Position @ $'+b.position.price+'</span> <span class="pnl '+((b.pnl||0)>=0?'up':'dn')+'">'+((b.pnl||0)>=0?'+':'')+'$'+(b.pnl||0).toFixed(2)+'</span>'
+            : '<span class="tag tag-pause">En attente d\u2019un signal d\u2019achat</span>');
         html += '<div style="display:flex;align-items:center;gap:10px;padding:9px 10px;background:var(--bg-2);border:1px solid var(--border);border-radius:8px">'
           + '<span style="font-size:15px">'+icon+'</span>'
           + '<div style="flex:1;font-size:11px"><strong style="color:var(--t0)">'+b.name+'</strong> \u00b7 '+b.symbol+' \u00b7 Capital: $'+b.capital+'</div>'
@@ -1095,7 +1097,7 @@ async function loadRealData() {
       body.innerHTML = html || '<div style="color:var(--t2);font-size:11px">Aucun bot configur\u00e9</div>';
     }
     setTxt('real-updated', 'Mis \u00e0 jour: ' + new Date().toLocaleTimeString('fr-FR') + ' \u00b7 Cycle bots toutes les 15 min');
-    setTxt('real-orders-count', ordRes.ok ? String(ordRes.orders.length) : '\u2014');
+    setTxt('real-orders-count', ordRes.restricted ? '\u{1F512}' : (ordRes.ok ? String(ordRes.orders.length) : '\u2014'));
 
     // Décisions IA (lecture mémoire — gratuit)
     try {
