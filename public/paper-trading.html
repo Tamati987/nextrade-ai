@@ -937,7 +937,7 @@ async function refreshAutoCandles() {
 async function checkAutoEntry(sym) {
   const cfg = REAL_BOTS[sym];
   const candlesArr = autoCandles[sym];
-  if (!cfg || !cfg.active || !candlesArr || candlesArr.length < 22) return; // coupe-circuit : ne rien évaluer si en pause
+  if (!cfg || !cfg.active || !candlesArr || candlesArr.length < 51) return; // coupe-circuit : ne rien évaluer si en pause (51 = assez pour l'EMA50 du filtre de tendance)
   const state = getPaperState(sym);
 
   const lastT = candlesArr[candlesArr.length-1].t;
@@ -951,13 +951,19 @@ async function checkAutoEntry(sym) {
   const e9Rising = state.e9Prev !== null && e9 > state.e9Prev;
   state.e9Prev = e9;
 
+  const price = livePrice[sym] || candlesArr[candlesArr.length-1].c;
+  const e50 = calcEMA(candlesArr, 50);
+  // ── Filtre de tendance (aligné avec trading-engine.js) : pas d'achat RSI-bas si le marché est
+  // en tendance baissière franche (prix sous l'EMA50 ≈ 12-13h sur ce timeframe 15 min).
+  const trendOk = price > e50;
+
   state.rsiHistory.push(rsi);
   if (state.rsiHistory.length > 5) state.rsiHistory.shift();
   const rsiPrev = state.rsiHistory.length >= 2 ? state.rsiHistory[state.rsiHistory.length-2] : rsi;
   const rsiRebondit = rsi > rsiPrev;
 
   const CONFIRM_CYCLES_REQUIRED = 1; // aligné avec trading-engine.js
-  const conditionBase = rsi < cfg.rsi_buy && e9Rising;
+  const conditionBase = rsi < cfg.rsi_buy && e9Rising && trendOk;
   state.confirmCount = (conditionBase && rsiRebondit) ? state.confirmCount + 1 : 0;
   if (state.confirmCount < CONFIRM_CYCLES_REQUIRED) return;
   state.confirmCount = 0;
@@ -966,7 +972,6 @@ async function checkAutoEntry(sym) {
   if (wallet.balance < capital) return;
 
   const mkt = MARKETS.find(m => m.sym === sym);
-  const price = livePrice[sym] || candlesArr[candlesArr.length-1].c;
   const e21 = calcEMA(candlesArr, 21);
   const first = candlesArr[0].c;
   const chg24h = (((price - first) / first) * 100).toFixed(2);
@@ -976,7 +981,7 @@ async function checkAutoEntry(sym) {
   try {
     const r = await fetch('/api/paper/validate', {
       method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ symbol: sym, name: mkt.bot, rsi_buy: cfg.rsi_buy, capital, tp: cfg.tp, sl: cfg.sl, price, rsi, rsiPrev, e9, e21, chg24h, lastCloses })
+      body: JSON.stringify({ symbol: sym, name: mkt.bot, rsi_buy: cfg.rsi_buy, capital, tp: cfg.tp, sl: cfg.sl, price, rsi, rsiPrev, e9, e21, e50, chg24h, lastCloses })
     });
     const d = await r.json();
     verdict = (d.ok && d.verdict) ? d.verdict : { decision:'CONFIRM', reason: 'IA indisponible côté serveur — règles seules' };

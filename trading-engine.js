@@ -132,6 +132,8 @@ function recordDecision(bot, ctx, verdict) {
       rsiPrev: ctx.rsiPrev,
       ema9: ctx.e9,
       ema21: ctx.e21,
+      ema50: ctx.e50,
+      trendOk: ctx.trendOk,
       ema9Rising: ctx.e9Rising,
       chg24h: ctx.chg24h,
       lastCloses: ctx.lastCloses,
@@ -277,6 +279,7 @@ async function askClaude(bot, ctx) {
 - Prix actuel: $${ctx.price}
 - RSI(14): ${ctx.rsi} (seuil achat: <${bot.rsi_buy}, en train de remonter depuis ${ctx.rsiPrev})
 - EMA9: ${ctx.e9.toFixed(2)} | EMA21: ${ctx.e21.toFixed(2)} — ${ctx.e9 > ctx.e21 ? 'EMA9 déjà au-dessus d\u2019EMA21' : 'EMA9 encore sous EMA21, pas de croisement complet'}, mais EMA9 ${ctx.e9Rising ? 'remonte (momentum positif)' : 'ne remonte pas encore'} — un signal avant croisement complet est normal, ne rejette pas pour ce seul motif
+- Tendance de fond (EMA50, ~12-13h sur ce timeframe): $${ctx.e50.toFixed(2)} — prix ${ctx.trendOk ? 'au-dessus (pas de tendance baissière franche, déjà filtré en amont)' : 'en dessous'}
 - Variation 24h: ${ctx.chg24h}%
 - 5 dernières clôtures: ${ctx.lastCloses.join(', ')}
 - Capital du trade: $${getBotEquity(bot).toFixed(2)} | TP: +${(bot.tp*100).toFixed(1)}% | SL: -${(bot.sl*100).toFixed(1)}%
@@ -453,6 +456,7 @@ async function runBot(bot) {
     const r       = rsi(candles);
     const e9      = ema(candles, 9);
     const e21     = ema(candles, 21);
+    const e50     = ema(candles, 50);
     const pos     = positions.get(bot.id);
 
     // ── suivi de l'historique RSI pour détecter un rebond ──
@@ -470,15 +474,21 @@ async function runBot(bot) {
     const e9Rising = state.e9Prev !== null && e9 > state.e9Prev;
     state.e9Prev = e9;
 
-    console.log(`\n📊 ${bot.name} | $${price} | RSI:${r} (préc. ${rsiPrev}) | EMA9:${e9.toFixed(2)}${e9Rising?' ↑':''} | EMA21:${e21.toFixed(2)}`);
+    // ── Filtre de tendance : on n'achète pas une survente RSI si le marché est en tendance
+    // baissière franche (prix sous l'EMA50 ≈ 12-13h sur ce timeframe 15 min). Un rebond RSI dans
+    // une vraie tendance baissière continue le plus souvent de chuter ("couteau qui tombe") au lieu
+    // de rebondir — c'est ce qui a fait perdre Alpha RSI 5 fois de suite début novembre 2026.
+    const trendOk = price > e50;
+
+    console.log(`\n📊 ${bot.name} | $${price} | RSI:${r} (préc. ${rsiPrev}) | EMA9:${e9.toFixed(2)}${e9Rising?' ↑':''} | EMA21:${e21.toFixed(2)} | EMA50:${e50.toFixed(2)}${trendOk?' (tendance OK)':' (tendance baissière — achats bloqués)'}`);
 
     if (pos) {
       await manageExit(bot, pos, price, r, true);
       return;
     }
 
-    // ── Condition de base : RSI bas + momentum EMA9 qui repart à la hausse ──
-    const conditionBase = r < bot.rsi_buy && e9Rising;
+    // ── Condition de base : RSI bas + momentum EMA9 qui repart à la hausse + tendance de fond pas baissière ──
+    const conditionBase = r < bot.rsi_buy && e9Rising && trendOk;
 
     // ── Filtre anti-signal-prématuré : RSI doit remonter, confirmé 1 cycle (plus réactif) ──
     const CONFIRM_CYCLES_REQUIRED = 1;
@@ -487,7 +497,7 @@ async function runBot(bot) {
     } else {
       state.confirmCount = 0;
     }
-    console.log(`🔎 Filtre confirmation: base=${conditionBase} | rebond=${rsiRebondit} | confirmations=${state.confirmCount}/${CONFIRM_CYCLES_REQUIRED}`);
+    console.log(`🔎 Filtre confirmation: base=${conditionBase} | rebond=${rsiRebondit} | tendance=${trendOk?'OK':'BAISSIÈRE'} | confirmations=${state.confirmCount}/${CONFIRM_CYCLES_REQUIRED}`);
 
     if (state.confirmCount >= CONFIRM_CYCLES_REQUIRED) {
       const tSignal = Date.now(); // ── début du chrono: signal confirmé, avant exécution ──
@@ -500,7 +510,7 @@ async function runBot(bot) {
       const chg24h = (((price - first) / first) * 100).toFixed(2);
       const lastCloses = candles.slice(-5).map(c => c.c);
       const recentHistory = getRecentHistorySummary(bot.id);
-      const ctx = { price, rsi: r, rsiPrev, e9, e21, e9Rising, chg24h, lastCloses, recentHistory };
+      const ctx = { price, rsi: r, rsiPrev, e9, e21, e50, trendOk, e9Rising, chg24h, lastCloses, recentHistory };
       let verdict;
       if (aiState.enabled) {
         console.log(`🧠 Signal confirmé (2/2) — consultation de Claude IA...`);

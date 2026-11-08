@@ -364,14 +364,14 @@ app.get('/api/real/verdicts/history', (req, res) => {
 app.post('/api/paper/validate', rateLimit('paper', 6), async (req, res) => {
   try {
     const { askClaude } = require('./trading-engine');
-    const { symbol, name, rsi_buy, capital, tp, sl, price, rsi, rsiPrev, e9, e21, chg24h, lastCloses } = req.body || {};
-    const nums = { rsi_buy, capital, tp, sl, price, rsi, rsiPrev, e9, e21 };
+    const { symbol, name, rsi_buy, capital, tp, sl, price, rsi, rsiPrev, e9, e21, e50, chg24h, lastCloses } = req.body || {};
+    const nums = { rsi_buy, capital, tp, sl, price, rsi, rsiPrev, e9, e21, e50 };
     for (const [k, v] of Object.entries(nums)) {
       if (typeof v !== 'number' || !Number.isFinite(v)) return res.status(400).json({ ok: false, error: `Champ numérique invalide: ${k}` });
     }
     if (!symbol || !name || !Array.isArray(lastCloses)) return res.status(400).json({ ok: false, error: 'Champs manquants (symbol, name, lastCloses)' });
     const bot = { symbol, name, rsi_buy, capital, tp, sl };
-    const ctx = { price, rsi, rsiPrev, e9, e21, chg24h: chg24h ?? '0.00', lastCloses, recentHistory: 'Pas d\'historique disponible (simulateur Paper Trading — pas de mémoire entre les sessions).' };
+    const ctx = { price, rsi, rsiPrev, e9, e21, e50, trendOk: price > e50, chg24h: chg24h ?? '0.00', lastCloses, recentHistory: 'Pas d\'historique disponible (simulateur Paper Trading — pas de mémoire entre les sessions).' };
     const verdict = await askClaude(bot, ctx);
     res.json({ ok: true, verdict });
   } catch(e) { res.json({ ok: false, error: e.message }); }
