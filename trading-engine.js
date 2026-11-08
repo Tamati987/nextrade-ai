@@ -183,7 +183,7 @@ function getRecentHistorySummary(botId, n = 3) {
 // Capital adapté à ~22 USDT au total
 const BOTS = [
   { id:'gold', name:'Gold Sentinel', symbol:'XAUTUSDT', capital:7, rsi_buy:42, rsi_sell:60, tp:0.03, sl:0.01, active:true, interval:'15', qtyDec:5 },
-  { id:'btc',  name:'Alpha RSI',     symbol:'BTCUSDT',  capital:7, rsi_buy:40, rsi_sell:62, tp:0.03, sl:0.01, active:false, /* coupé le 08/11/2026 : 5 stop loss d'affilée (~-1% chacun) pendant une tendance baissière marquée sur BTC — le TP +3% n'aide pas un achat RSI bas qui continue de chuter */ interval:'15', qtyDec:6 },
+  { id:'btc',  name:'Alpha RSI',     symbol:'BTCUSDT',  capital:7, rsi_buy:40, rsi_sell:62, tp:0.03, sl:0.01, active:true, /* réactivé le 08/11/2026 avec le filtre de tendance EMA50 (coupé plus tôt le même jour : 5 SL d'affilée en tendance baissière) */ interval:'15', qtyDec:6 },
   { id:'eth',  name:'Grid ETH',      symbol:'ETHUSDT',  capital:7, rsi_buy:43, rsi_sell:58, tp:0.03, sl:0.01, active:true, /* réactivé le 07/11/2026 avec TP relevé à 3% (même correctif que Gold/BTC après coupé le 25/10 pour 4 SL d'affilée à TP 1.5%) */ interval:'15', qtyDec:5 },
   // Nouvelles paires : capital réduit ($3) tant qu'elles n'ont pas fait leurs preuves, et vu le
   // solde total limité (~22$) partagé entre les 5 bots. qtyDec choisi conservateur (précision
