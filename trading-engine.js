@@ -134,6 +134,7 @@ function recordDecision(bot, ctx, verdict) {
       ema21: ctx.e21,
       ema50: ctx.e50,
       trendOk: ctx.trendOk,
+      trendOverride: ctx.trendOverride,
       ema9Rising: ctx.e9Rising,
       chg24h: ctx.chg24h,
       lastCloses: ctx.lastCloses,
@@ -279,7 +280,7 @@ async function askClaude(bot, ctx) {
 - Prix actuel: $${ctx.price}
 - RSI(14): ${ctx.rsi} (seuil achat: <${bot.rsi_buy}, en train de remonter depuis ${ctx.rsiPrev})
 - EMA9: ${ctx.e9.toFixed(2)} | EMA21: ${ctx.e21.toFixed(2)} — ${ctx.e9 > ctx.e21 ? 'EMA9 déjà au-dessus d\u2019EMA21' : 'EMA9 encore sous EMA21, pas de croisement complet'}, mais EMA9 ${ctx.e9Rising ? 'remonte (momentum positif)' : 'ne remonte pas encore'} — un signal avant croisement complet est normal, ne rejette pas pour ce seul motif
-- Tendance de fond (EMA50, ~12-13h sur ce timeframe): $${ctx.e50.toFixed(2)} — prix ${ctx.trendOk ? 'au-dessus (pas de tendance baissière franche, déjà filtré en amont)' : 'en dessous'}
+- Tendance de fond (EMA50, ~12-13h sur ce timeframe): $${ctx.e50.toFixed(2)} — prix ${ctx.trendOk ? 'au-dessus (pas de tendance baissière franche, déjà filtré en amont)' : 'en dessous — ATTENTION: entrée de rebond CONTRE-TENDANCE (RSI en hausse, EMA9 en hausse, prix à moins de 1.5% sous l\'EMA50); validation stricte requise, rejette si le rebond semble fragile ou si la tendance baissière domine'}
 - Variation 24h: ${ctx.chg24h}%
 - 5 dernières clôtures: ${ctx.lastCloses.join(', ')}
 - Capital du trade: $${getBotEquity(bot).toFixed(2)} | TP: +${(bot.tp*100).toFixed(1)}% | SL: -${(bot.sl*100).toFixed(1)}%
@@ -431,7 +432,9 @@ async function withBotLock(bot, fn) {
 // ── Surveillance rapide : toutes les minutes, vérifie seulement les positions ouvertes ──
 // (les achats restent sur le cycle 15 min). Ne consomme aucun appel Claude.
 async function monitorPositions() {
-  for (const bot of BOTS.filter(b => b.active)) {
+  // Les sorties (SL / TP / stop suiveur) doivent tourner même sur un bot en pause
+  // (toggle manuel ou coupe-circuit) : on parcourt tous les bots ayant une position ouverte.
+  for (const bot of BOTS.filter(b => positions.has(b.id))) {
     const pos = positions.get(bot.id);
     if (!pos) continue;
     await withBotLock(bot, async () => {
@@ -488,7 +491,10 @@ async function runBot(bot) {
     }
 
     // ── Condition de base : RSI bas + momentum EMA9 qui repart à la hausse + tendance de fond pas baissière ──
-    const conditionBase = r < bot.rsi_buy && e9Rising && trendOk;
+    // Exception : rebond confirmé (RSI + EMA9 remontent) toléré sous l'EMA50, tant que le prix reste proche.
+    const reboundOk = rsiRebondit && e9Rising && price >= e50 * 0.985; // rebond confirmé, pas en chute libre (max 1.5% sous EMA50)
+    const entryTrendOk = trendOk || reboundOk;
+    const conditionBase = r < bot.rsi_buy && entryTrendOk;
 
     // ── Filtre anti-signal-prématuré : RSI doit remonter, confirmé 1 cycle (plus réactif) ──
     const CONFIRM_CYCLES_REQUIRED = 1;
@@ -497,7 +503,7 @@ async function runBot(bot) {
     } else {
       state.confirmCount = 0;
     }
-    console.log(`🔎 Filtre confirmation: base=${conditionBase} | rebond=${rsiRebondit} | tendance=${trendOk?'OK':'BAISSIÈRE'} | confirmations=${state.confirmCount}/${CONFIRM_CYCLES_REQUIRED}`);
+    console.log(`🔎 Filtre confirmation: base=${conditionBase} | rebond=${rsiRebondit} | tendance=${trendOk?'OK':(reboundOk?'REBOND_CONTRE_TENDANCE':'BAISSIÈRE')} | confirmations=${state.confirmCount}/${CONFIRM_CYCLES_REQUIRED}`);
 
     if (state.confirmCount >= CONFIRM_CYCLES_REQUIRED) {
       const tSignal = Date.now(); // ── début du chrono: signal confirmé, avant exécution ──
@@ -510,7 +516,7 @@ async function runBot(bot) {
       const chg24h = (((price - first) / first) * 100).toFixed(2);
       const lastCloses = candles.slice(-5).map(c => c.c);
       const recentHistory = getRecentHistorySummary(bot.id);
-      const ctx = { price, rsi: r, rsiPrev, e9, e21, e50, trendOk, e9Rising, chg24h, lastCloses, recentHistory };
+      const ctx = { price, rsi: r, rsiPrev, e9, e21, e50, trendOk, trendOverride: !trendOk && reboundOk, e9Rising, chg24h, lastCloses, recentHistory };
       let verdict;
       if (aiState.enabled) {
         console.log(`🧠 Signal confirmé (2/2) — consultation de Claude IA...`);
