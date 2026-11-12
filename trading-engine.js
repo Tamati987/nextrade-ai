@@ -279,7 +279,7 @@ async function askClaude(bot, ctx) {
 - Prix actuel: $${ctx.price}
 - RSI(14): ${ctx.rsi} (seuil achat: <${bot.rsi_buy}, en train de remonter depuis ${ctx.rsiPrev})
 - EMA9: ${ctx.e9.toFixed(2)} | EMA21: ${ctx.e21.toFixed(2)} — ${ctx.e9 > ctx.e21 ? 'EMA9 déjà au-dessus d\u2019EMA21' : 'EMA9 encore sous EMA21, pas de croisement complet'}, mais EMA9 ${ctx.e9Rising ? 'remonte (momentum positif)' : 'ne remonte pas encore'} — un signal avant croisement complet est normal, ne rejette pas pour ce seul motif
-- Tendance de fond (EMA50, ~12-13h sur ce timeframe): $${ctx.e50.toFixed(2)} — prix ${ctx.trendOk ? 'au-dessus (pas de tendance baissière franche, déjà filtré en amont)' : 'en dessous'}
+- Tendance de fond (EMA50, ~12-13h sur ce timeframe): $${ctx.e50.toFixed(2)} — prix ${ctx.price > ctx.e50 ? 'au-dessus' : 'en dessous'}, EMA50 ${ctx.e50Rising === false ? 'en baisse' : 'stable ou en hausse'} (les vraies tendances baissières — prix sous une EMA50 qui baisse — sont déjà filtrées en amont ; un repli sous une EMA50 stable/montante est une correction normale, ne rejette pas pour ce seul motif)
 - Variation 24h: ${ctx.chg24h}%
 - 5 dernières clôtures: ${ctx.lastCloses.join(', ')}
 - Capital du trade: $${getBotEquity(bot).toFixed(2)} | TP: +${(bot.tp*100).toFixed(1)}% | SL: -${(bot.sl*100).toFixed(1)}%
@@ -474,13 +474,19 @@ async function runBot(bot) {
     const e9Rising = state.e9Prev !== null && e9 > state.e9Prev;
     state.e9Prev = e9;
 
-    // ── Filtre de tendance : on n'achète pas une survente RSI si le marché est en tendance
-    // baissière franche (prix sous l'EMA50 ≈ 12-13h sur ce timeframe 15 min). Un rebond RSI dans
-    // une vraie tendance baissière continue le plus souvent de chuter ("couteau qui tombe") au lieu
-    // de rebondir — c'est ce qui a fait perdre Alpha RSI 5 fois de suite début novembre 2026.
-    const trendOk = price > e50;
+    // ── Filtre de tendance (assoupli le 11/11/2026) ──
+    // Avant : on exigeait prix > EMA50. Or le bot achète quand le RSI est bas, c'est-à-dire
+    // justement quand le prix vient de baisser — donc presque toujours sous l'EMA50. Les deux
+    // conditions étaient quasi incompatibles : aucun achat possible.
+    // Maintenant : on ne bloque que la vraie tendance baissière = prix SOUS l'EMA50 ET EMA50 qui
+    // DESCEND (comparée à il y a 1h, 4 bougies de 15 min). Un repli sous une EMA50 plate ou
+    // montante (correction dans une tendance saine) est autorisé. On garde la protection contre
+    // le "couteau qui tombe" qui a fait perdre Alpha RSI 5 fois de suite début novembre 2026.
+    const e50Prev   = ema(candles.slice(0, -4), 50);
+    const e50Rising = e50 >= e50Prev;
+    const trendOk   = price > e50 || e50Rising;
 
-    console.log(`\n📊 ${bot.name} | $${price} | RSI:${r} (préc. ${rsiPrev}) | EMA9:${e9.toFixed(2)}${e9Rising?' ↑':''} | EMA21:${e21.toFixed(2)} | EMA50:${e50.toFixed(2)}${trendOk?' (tendance OK)':' (tendance baissière — achats bloqués)'}`);
+    console.log(`\n📊 ${bot.name} | $${price} | RSI:${r} (préc. ${rsiPrev}) | EMA9:${e9.toFixed(2)}${e9Rising?' ↑':''} | EMA21:${e21.toFixed(2)} | EMA50:${e50.toFixed(2)}${e50Rising?' ↑':' ↓'}${trendOk?' (tendance OK)':' (prix sous EMA50 qui baisse — achats bloqués)'}`);
 
     if (pos) {
       await manageExit(bot, pos, price, r, true);
@@ -510,10 +516,10 @@ async function runBot(bot) {
       const chg24h = (((price - first) / first) * 100).toFixed(2);
       const lastCloses = candles.slice(-5).map(c => c.c);
       const recentHistory = getRecentHistorySummary(bot.id);
-      const ctx = { price, rsi: r, rsiPrev, e9, e21, e50, trendOk, e9Rising, chg24h, lastCloses, recentHistory };
+      const ctx = { price, rsi: r, rsiPrev, e9, e21, e50, e50Rising, trendOk, e9Rising, chg24h, lastCloses, recentHistory };
       let verdict;
       if (aiState.enabled) {
-        console.log(`🧠 Signal confirmé (2/2) — consultation de Claude IA...`);
+        console.log(`🧠 Signal confirmé — consultation de Claude IA...`);
         verdict = await askClaude(bot, ctx);
       } else {
         console.log(`⏸ Validation IA en pause — règles RSI seules`);
