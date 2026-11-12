@@ -273,16 +273,17 @@ async function askClaude(bot, ctx) {
       body: JSON.stringify({
         model: 'claude-sonnet-4-6',
         max_tokens: 300,
-        system: `Tu es un validateur de trades pour un bot spot (Buy Low / Sell High, petit capital, objectif: gains fréquents et modestes plutôt qu'un gros mouvement rare). Un signal d'ACHAT vient d'être détecté et confirmé par les règles RSI. Ton rôle : le CONFIRMER ou le REJETER selon le contexte technique et l'historique. Sois conservateur : en cas de doute ou de sur-exposition, REJETTE. Tu ne peux PAS modifier les montants ni la stratégie. Utilise l'historique récent de ce bot pour repérer des patterns (sur-exposition sur le même actif, rejets récents qui auraient été de bons trades, confirmations récentes mal tournées) et ajuste ton jugement en conséquence. Réponds UNIQUEMENT en JSON strict, sans texte avant ou après: {"decision":"CONFIRM"|"REJECT","confidence":0-100,"reason":"explication courte en français"}`,
+        system: `Tu es un validateur de trades pour un bot spot (Buy Low / Sell High, petit capital, objectif: gains fréquents et modestes plutôt qu'un gros mouvement rare). Un signal d'ACHAT vient d'être détecté et confirmé par les règles RSI. Ton rôle : le CONFIRMER ou le REJETER selon le contexte technique et l'historique. Sois conservateur : en cas de doute ou de sur-exposition, REJETTE. Tu ne peux PAS modifier les montants ni la stratégie. Utilise l'historique récent de ce bot pour repérer des patterns (sur-exposition sur le même actif, rejets récents qui auraient été de bons trades, confirmations récentes mal tournées) et ajuste ton jugement en conséquence. Base tes rejets UNIQUEMENT sur les données fournies dans ce message : n'invente et ne cite JAMAIS de pertes passées qui ne figurent pas dans la section "Historique récent". Réponds UNIQUEMENT en JSON strict, sans texte avant ou après: {"decision":"CONFIRM"|"REJECT","confidence":0-100,"reason":"explication courte en français"}`,
         messages: [{ role: 'user', content: `Signal ACHAT détecté et confirmé:
 - Marché: ${bot.symbol} (${bot.name})
 - Prix actuel: $${ctx.price}
 - RSI(14): ${ctx.rsi} (seuil achat: <${bot.rsi_buy}, en train de remonter depuis ${ctx.rsiPrev})
 - EMA9: ${ctx.e9.toFixed(2)} | EMA21: ${ctx.e21.toFixed(2)} — ${ctx.e9 > ctx.e21 ? 'EMA9 déjà au-dessus d\u2019EMA21' : 'EMA9 encore sous EMA21, pas de croisement complet'}, mais EMA9 ${ctx.e9Rising ? 'remonte (momentum positif)' : 'ne remonte pas encore'} — un signal avant croisement complet est normal, ne rejette pas pour ce seul motif
-- Tendance de fond (EMA50, ~12-13h sur ce timeframe): $${ctx.e50.toFixed(2)} — prix ${ctx.trendOk ? 'au-dessus (pas de tendance baissière franche, déjà filtré en amont)' : 'en dessous'}
+- Tendance de fond (EMA50, ~12-13h sur ce timeframe): $${ctx.e50.toFixed(2)} — prix ${ctx.trendOk ? 'au-dessus (pas de tendance baissière franche)' : 'en dessous — les entrées REBOUND_CONTRE_TENDANCE sont volontaires (RSI survendu + rebond confirmé + taille réduite de moitié) : ne rejette PAS uniquement parce que le prix est sous l\'EMA50'}
+- Type d'entrée: ${ctx.entryType || (ctx.trendOk ? 'TREND' : 'REBOUND_CONTRE_TENDANCE')}
 - Variation 24h: ${ctx.chg24h}%
 - 5 dernières clôtures: ${ctx.lastCloses.join(', ')}
-- Capital du trade: $${getBotEquity(bot).toFixed(2)} | TP: +${(bot.tp*100).toFixed(1)}% | SL: -${(bot.sl*100).toFixed(1)}%
+- Montant de l'ordre: $${(ctx.notional ?? getBotEquity(bot)).toFixed(2)} | Capital du bot: $${getBotEquity(bot).toFixed(2)} | TP: +${(bot.tp*100).toFixed(1)}% | SL: -${(bot.sl*100).toFixed(1)}%
 - Historique récent de ce bot (du plus ancien au plus récent):
 ${ctx.recentHistory}
 Valide ou rejette cette entrée.` }]
@@ -321,18 +322,46 @@ function ema(candles, p) {
   return e;
 }
 
+// ── RÈGLES INSTRUMENT BYBIT (précision de quantité, minimums d'ordre) — mises en cache par symbole ──
+const instrumentCache = new Map(); // symbol -> { basePrecision, minOrderQty, minOrderAmt }
+
+async function getInstrument(symbol) {
+  if (instrumentCache.has(symbol)) return instrumentCache.get(symbol);
+  try {
+    const d = await api('GET', '/v5/market/instruments-info', { category:'spot', symbol });
+    if (d.retCode !== 0) throw new Error(d.retMsg);
+    const lot = d.result?.list?.[0]?.lotSizeFilter;
+    if (!lot) throw new Error('lotSizeFilter absent');
+    const inst = {
+      basePrecision: lot.basePrecision || null,
+      minOrderQty: +lot.minOrderQty || 0,
+      minOrderAmt: +lot.minOrderAmt || 1,
+    };
+    instrumentCache.set(symbol, inst);
+    return inst;
+  } catch (e) {
+    console.log(`⚠️ Règles instrument ${symbol} indisponibles (${String(e.message).slice(0,60)}) — valeurs par défaut utilisées`);
+    return { basePrecision: null, minOrderQty: 0, minOrderAmt: 1 }; // non mis en cache : nouvel essai au prochain appel
+  }
+}
+
+// Nombre de décimales d'un pas Bybit (ex: "0.00001" -> 5, "1" -> 0)
+function decimalsFromStep(step) {
+  const s = String(step);
+  return s.includes('.') ? s.split('.')[1].length : 0;
+}
+
 // SPOT: on achète en montant USDT (marketUnit quoteCoin), on revend la quantité de coin
-async function buySpot(bot, price) {
-  const capital = getBotEquity(bot); // capital composé : grandit/rétrécit avec les trades précédents
-  console.log(`\n🟢 ${bot.name} | ACHAT ${bot.symbol} @ $${price} | ${capital.toFixed(2)} USDT (capital composé, initial $${bot.capital})`);
+async function buySpot(bot, price, notional) {
+  console.log(`\n🟢 ${bot.name} | ACHAT ${bot.symbol} @ $${price} | ${notional.toFixed(2)} USDT (capital composé: $${getBotEquity(bot).toFixed(2)}, initial $${bot.capital})`);
   const d = await api('POST', '/v5/order/create', {
     category:'spot', symbol:bot.symbol, side:'Buy', orderType:'Market',
-    qty: capital.toFixed(2), marketUnit:'quoteCoin', timeInForce:'IOC',
+    qty: notional.toFixed(2), marketUnit:'quoteCoin', timeInForce:'IOC',
   });
   if (d.retCode !== 0) { console.error('❌ Achat échoué:', d.retMsg); return null; }
-  const qty = +(capital / price).toFixed(bot.qtyDec);
+  const qty = +(notional / price).toFixed(bot.qtyDec);
   console.log('✅ Achat OK:', d.result.orderId, '| ~', qty, bot.symbol.replace('USDT',''));
-  return { orderId:d.result.orderId, price, qty, side:'buy', capitalUsed: capital };
+  return { orderId:d.result.orderId, price, qty, side:'buy', capitalUsed: notional };
 }
 
 async function sellSpot(bot, price) {
@@ -346,15 +375,18 @@ async function sellSpot(bot, price) {
   let avail = pos.qty;
   try { avail = await getCoinBalance(coin); }
   catch(e) { console.log(`⚠️ Lecture solde ${coin} impossible (${e.message.slice(0,40)}) — utilisation qty enregistrée`); }
-  const factor = Math.pow(10, bot.qtyDec);
-  const qtyToSell = Math.floor(Math.min(pos.qty, avail) * factor) / factor;
+  // Précision et minimum réels de Bybit (bot.qtyDec seulement en repli si basePrecision inconnue)
+  const inst = await getInstrument(bot.symbol);
+  const qtyDecimals = inst.basePrecision ? decimalsFromStep(inst.basePrecision) : bot.qtyDec;
+  const step = inst.basePrecision ? +inst.basePrecision : Math.pow(10, -bot.qtyDec);
+  const qtyToSell = +(Math.floor(Math.min(pos.qty, avail) / step) * step).toFixed(qtyDecimals);
 
-  if (qtyToSell <= 0) {
+  if (qtyToSell <= 0 || (inst.minOrderQty > 0 && qtyToSell < inst.minOrderQty)) {
     // Solde réel quasi nul alors qu'une position est enregistrée : elle a déjà été
     // liquidée ailleurs (vente manuelle, précision Bybit...). La garder bloquerait le bot
     // indéfiniment (plus jamais d'achat possible tant que `pos` existe). On l'efface et on
     // alerte fort plutôt que de la laisser "fantôme".
-    console.error(`🚨 ${bot.name}: position enregistrée (${pos.qty} ${coin}) mais solde réel quasi nul (${avail}) — position effacée pour débloquer le bot. Vérifiez l'historique Bybit manuellement.`);
+    console.error(`🚨 ${bot.name}: position enregistrée (${pos.qty} ${coin}) mais quantité vendable (${qtyToSell}) nulle ou sous le minimum Bybit (${inst.minOrderQty}) — solde réel: ${avail} — position effacée pour débloquer le bot. Vérifiez l'historique Bybit manuellement.`);
     positions.delete(bot.id);
     savePositions();
     return;
@@ -363,11 +395,12 @@ async function sellSpot(bot, price) {
   console.log(`\n🔴 ${bot.name} | VENTE ${bot.symbol} @ $${price} | qty ${qtyToSell} (enregistrée: ${pos.qty}, solde: ${avail})`);
   const d = await api('POST', '/v5/order/create', {
     category:'spot', symbol:bot.symbol, side:'Sell', orderType:'Market',
-    qty: qtyToSell.toFixed(bot.qtyDec), marketUnit:'baseCoin', timeInForce:'IOC',
+    qty: qtyToSell.toFixed(qtyDecimals), marketUnit:'baseCoin', timeInForce:'IOC',
   });
   if (d.retCode !== 0) { console.error('❌ Vente échouée:', d.retMsg); return; }
-  const pnl = (price - pos.price) * qtyToSell;
-  console.log(`💰 ${bot.name} vendu | PnL: ${pnl>=0?'+':''}$${pnl.toFixed(2)}`);
+  // PnL net : frais taker 0.1% de chaque côté (taux de base Bybit spot)
+  const pnl = (price - pos.price) * qtyToSell - 0.001 * (pos.price * qtyToSell + price * qtyToSell);
+  console.log(`💰 ${bot.name} vendu | PnL net (frais 0.1%/côté inclus): ${pnl>=0?'+':''}$${pnl.toFixed(2)}`);
   applyTradePnl(bot, pnl);
   recordTradeOutcome(bot.id, pnl);
   positions.delete(bot.id);
@@ -431,7 +464,8 @@ async function withBotLock(bot, fn) {
 // ── Surveillance rapide : toutes les minutes, vérifie seulement les positions ouvertes ──
 // (les achats restent sur le cycle 15 min). Ne consomme aucun appel Claude.
 async function monitorPositions() {
-  for (const bot of BOTS.filter(b => b.active)) {
+  // Tous les bots (même en pause via le coupe-circuit) : une position ouverte doit toujours avoir son SL/TP
+  for (const bot of BOTS) {
     const pos = positions.get(bot.id);
     if (!pos) continue;
     await withBotLock(bot, async () => {
@@ -480,40 +514,41 @@ async function runBot(bot) {
     // de rebondir — c'est ce qui a fait perdre Alpha RSI 5 fois de suite début novembre 2026.
     const trendOk = price > e50;
 
-    console.log(`\n📊 ${bot.name} | $${price} | RSI:${r} (préc. ${rsiPrev}) | EMA9:${e9.toFixed(2)}${e9Rising?' ↑':''} | EMA21:${e21.toFixed(2)} | EMA50:${e50.toFixed(2)}${trendOk?' (tendance OK)':' (tendance baissière — achats bloqués)'}`);
+    console.log(`\n📊 ${bot.name} | $${price} | RSI:${r} (préc. ${rsiPrev}) | EMA9:${e9.toFixed(2)}${e9Rising?' ↑':''} | EMA21:${e21.toFixed(2)} | EMA50:${e50.toFixed(2)}${trendOk?' (tendance OK)':' (tendance baissière — rebond seul autorisé, taille réduite)'}`);
 
     if (pos) {
       await manageExit(bot, pos, price, r, true);
       return;
     }
 
-    // ── Condition de base : RSI bas + momentum EMA9 qui repart à la hausse + tendance de fond pas baissière ──
-    const conditionBase = r < bot.rsi_buy && e9Rising && trendOk;
+    // ── Signal d'entrée : RSI survendu + rebond confirmé (RSI qui remonte ET EMA9 qui remonte) ──
+    // Un achat contre-tendance (prix sous EMA50) reste possible sur ce seul signal, avec une taille réduite de moitié.
+    const oversold = r < bot.rsi_buy;
+    const rebound  = rsiRebondit && e9Rising;
+    const signal   = oversold && rebound;
+    const entryType = trendOk ? 'TREND' : 'REBOUND_CONTRE_TENDANCE';
+    console.log(`🔎 Filtre entrée: survente=${oversold} | rebond=${rebound} | tendance=${trendOk?'OK':'BAISSIÈRE'} | type=${entryType}`);
 
-    // ── Filtre anti-signal-prématuré : RSI doit remonter, confirmé 1 cycle (plus réactif) ──
-    const CONFIRM_CYCLES_REQUIRED = 1;
-    if (conditionBase && rsiRebondit) {
-      state.confirmCount++;
-    } else {
-      state.confirmCount = 0;
-    }
-    console.log(`🔎 Filtre confirmation: base=${conditionBase} | rebond=${rsiRebondit} | tendance=${trendOk?'OK':'BAISSIÈRE'} | confirmations=${state.confirmCount}/${CONFIRM_CYCLES_REQUIRED}`);
-
-    if (state.confirmCount >= CONFIRM_CYCLES_REQUIRED) {
+    if (signal) {
       const tSignal = Date.now(); // ── début du chrono: signal confirmé, avant exécution ──
       const bal = await getBalance();
-      const capitalNeeded = getBotEquity(bot);
-      if (bal < capitalNeeded) { console.log(`⚠️ Solde insuffisant: $${bal.toFixed(2)} < $${capitalNeeded.toFixed(2)} requis (capital composé)`); return; }
+      // Montant plafonné : jamais plus que le solde USDT libre (marge de 2% pour les frais)
+      const notional = Math.min(getBotEquity(bot) * (trendOk ? 1 : 0.5), bal * 0.98);
+      const inst = await getInstrument(bot.symbol);
+      if (notional < inst.minOrderAmt) {
+        console.log(`⚠️ Montant insuffisant pour l'ordre minimum Bybit: $${notional.toFixed(2)} < $${inst.minOrderAmt} (solde: $${bal.toFixed(2)})`);
+        return;
+      }
 
       // ── VALIDATION PAR CLAUDE IA ──
       const first = candles[0].c;
       const chg24h = (((price - first) / first) * 100).toFixed(2);
       const lastCloses = candles.slice(-5).map(c => c.c);
       const recentHistory = getRecentHistorySummary(bot.id);
-      const ctx = { price, rsi: r, rsiPrev, e9, e21, e50, trendOk, e9Rising, chg24h, lastCloses, recentHistory };
+      const ctx = { price, rsi: r, rsiPrev, e9, e21, e50, trendOk, e9Rising, chg24h, lastCloses, recentHistory, entryType, notional };
       let verdict;
       if (aiState.enabled) {
-        console.log(`🧠 Signal confirmé (2/2) — consultation de Claude IA...`);
+        console.log(`🧠 Signal confirmé (${entryType}) — consultation de Claude IA...`);
         verdict = await askClaude(bot, ctx);
       } else {
         console.log(`⏸ Validation IA en pause — règles RSI seules`);
@@ -523,14 +558,12 @@ async function runBot(bot) {
       recordDecision(bot, ctx, verdict);
       if (verdict.decision === 'REJECT') {
         console.log(`🛑 Entrée rejetée par l'IA — le bot attend un meilleur signal | temps total: ${Date.now() - tSignal}ms`);
-        state.confirmCount = 0;
         return;
       }
 
-      const o = await buySpot(bot, price);
-      if (o) { positions.set(bot.id, { ...o, openedAt: new Date().toISOString(), aiReason: verdict.reason }); savePositions(); }
+      const o = await buySpot(bot, price, notional);
+      if (o) { positions.set(bot.id, { ...o, capitalUsed: notional, entryType, openedAt: new Date().toISOString(), aiReason: verdict.reason }); savePositions(); }
       console.log(`⏱️ Temps total signal → exécution: ${Date.now() - tSignal}ms`);
-      state.confirmCount = 0;
     } else {
       console.log(`⏳ Pas de signal confirmé (RSI=${r}, cible <${bot.rsi_buy})`);
     }
